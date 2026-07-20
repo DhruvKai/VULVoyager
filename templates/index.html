@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VULVoyager</title>
+    <!-- Set the theme before first paint so dark-by-default doesn't flash light -->
+    <script>
+      (function () {
+        try {
+          document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+    <!-- Tailwind CSS (the one remaining CDN dependency -- its runtime JIT script
+         has no drop-in offline build; the app already needs internet for NVD/EPSS/KEV) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='vendor/jquery.dataTables.min.css') }}"
+    />
+    <script src="{{ url_for('static', filename='vendor/jquery-3.7.0.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/jquery.dataTables.min.js') }}"></script>
+    <!-- mark.js -->
+    <script src="{{ url_for('static', filename='vendor/mark.min.js') }}"></script>
+    <!-- Chart.js for visualizations -->
+    <script src="{{ url_for('static', filename='vendor/chart.min.js') }}"></script>
+    <!-- D3.js for dependency graph -->
+    <script src="{{ url_for('static', filename='vendor/d3.v7.min.js') }}"></script>
+    <style>
+      /* VS Code-style minimal scrollbars (Chromium/WebView2) */
+      ::-webkit-scrollbar {
+        width: 14px;
+        height: 14px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: rgba(121, 121, 121, 0.4);
+        background-clip: padding-box;
+        border: 3px solid transparent;
+        border-radius: 7px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(100, 100, 100, 0.7);
+      }
+      ::-webkit-scrollbar-thumb:active {
+        background-color: rgba(191, 191, 191, 0.4);
+      }
+      ::-webkit-scrollbar-corner {
+        background: transparent;
+      }
+
+      mark {
+        background: yellow;
+        color: black;
+        padding: 0;
+      }
+
+      /* Enhanced search input styling */
+      input.dt-search {
+        border: 1px solid #d1d5db;
+        border-radius: 0.25rem;
+        padding: 3px 8px;
+        width: 100%;
+        box-sizing: border-box;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+        user-select: text !important;
+      }
+
+      input.dt-search:focus {
+        outline: 2px solid #3b82f6;
+        outline-offset: 1px;
+      }
+
+      .dataTables_wrapper .dataTables_filter {
+        display: none;
+      }
+
+      /* Column sizing is handled by DataTables' own columnDefs (see script) */
+      #cve_table th:nth-child(3),
+      #cve_table td:nth-child(3) {
+        text-align: center;
+      }
+      #cve_table th:nth-child(4),
+      #cve_table td:nth-child(4) {
+        text-align: center;
+      }
+
+      /* Custom badges -- fixed status palette, consistent with the charts */
+      .badge-kev {
+        background: #d03b3b;
+        color: #fff;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .badge-critical {
+        background: #d03b3b;
+        color: #fff;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .badge-high {
+        background: #ec835a;
+        color: #fff;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .badge-medium {
+        background: #fab219;
+        color: #111827;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .badge-low {
+        background: #0ca30c;
+        color: #fff;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .badge-na {
+        @apply bg-gray-500 text-white px-2 py-1 rounded-full text-xs font-semibold;
+      }
+
+      .epss-high {
+        color: #d03b3b;
+        font-weight: 700;
+      }
+      .epss-medium {
+        color: #ec835a;
+        font-weight: 700;
+      }
+      .epss-low {
+        color: #0ca30c;
+        font-weight: 700;
+      }
+
+      .stats-card {
+        @apply bg-white p-5 rounded-xl shadow-sm border border-l-4;
+      }
+      .kev-row {
+        @apply bg-red-50 border-l-4 border-red-500;
+      }
+      .critical-row {
+        @apply bg-orange-50 border-l-4 border-orange-500;
+      }
+
+      /* Chart containers -- normal flex sizing, no absolute-position clipping */
+      .chart-container {
+        @apply bg-white p-5 rounded-xl shadow-sm border;
+        display: flex;
+        flex-direction: column;
+        min-height: 340px;
+        width: 100%;
+      }
+      .chart-container h3 {
+        @apply text-sm font-semibold mb-2 text-gray-700;
+        flex: 0 0 auto;
+      }
+      .chart-canvas-wrap {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 260px;
+      }
+
+      /* Tabs */
+      .tabs {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 9999px;
+        background: var(--bg-primary-dm);
+        border: 1px solid var(--border-dm);
+        margin-bottom: 1.5rem;
+      }
+      .tab-btn {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary-dm);
+        font-size: 0.875rem;
+        font-weight: 600;
+        padding: 0.5rem 1.25rem;
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+      .tab-btn:hover {
+        color: var(--text-primary-dm);
+      }
+      .tab-btn.is-active {
+        background: #2a78d6;
+        color: #fff;
+      }
+      [data-theme="dark"] .tab-btn.is-active {
+        background: #3987e5;
+      }
+      .tab-btn:focus-visible {
+        outline: 2px solid #2a78d6;
+        outline-offset: 2px;
+      }
+      .tab-panel[hidden] {
+        display: none !important;
+      }
+
+      .patch-meter-track {
+        background: #cfead0;
+      }
+      [data-theme="dark"] .patch-meter-track {
+        background: #1f3d24;
+      }
+
+      /* Dependency graph container -- expands to a fixed overlay in fullscreen mode */
+      .dependency-graph {
+        width: 100%;
+        height: 500px;
+        background: var(--chart-bg-dm);
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        position: relative;
+        border: 1px solid var(--border-dm);
+        transition: all 0.3s ease;
+      }
+
+      [data-theme="dark"] .dependency-graph {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        border: 1px solid #374151;
+      }
+
+      .dependency-graph.is-fullscreen {
+        position: fixed;
+        inset: 16px;
+        width: auto;
+        height: auto;
+        margin-bottom: 0;
+        z-index: 1000;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+
+      .fullscreen-toggle {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 20;
+        background: var(--bg-secondary-dm);
+        color: var(--text-primary-dm);
+        border: 1px solid var(--border-dm);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+      }
+      .fullscreen-toggle:hover {
+        filter: brightness(0.97);
+      }
+
+      #dependency-svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* Graph nodes -- categorical slots 1 (blue, products) and 2 (green, versions) */
+      .node-product {
+        fill: #2a78d6;
+        stroke: #184f95;
+        stroke-width: 2px;
+        transition: all 0.3s ease;
+      }
+
+      [data-theme="dark"] .node-product {
+        fill: #3987e5;
+        stroke: #2a78d6;
+      }
+
+      .node-version {
+        fill: #008300;
+        stroke: #006300;
+        stroke-width: 2px;
+        transition: all 0.3s ease;
+      }
+
+      [data-theme="dark"] .node-version {
+        fill: #008300;
+        stroke: #34d399;
+      }
+
+      /* Status overlay -- same fixed hexes as the badges/charts, both themes */
+      .node-critical {
+        fill: #d03b3b !important;
+        stroke: #a82f2f !important;
+      }
+
+      [data-theme="dark"] .node-critical {
+        fill: #d03b3b !important;
+        stroke: #e66767 !important;
+      }
+
+      .node-high {
+        fill: #ec835a !important;
+        stroke: #c96538 !important;
+      }
+
+      [data-theme="dark"] .node-high {
+        fill: #ec835a !important;
+        stroke: #f2a583 !important;
+      }
+
+      /* Enhanced links with dark mode */
+      .link {
+        stroke: #6b7280;
+        stroke-width: 2px;
+        stroke-opacity: 0.6;
+        transition: all 0.3s ease;
+      }
+
+      [data-theme="dark"] .link {
+        stroke: #9ca3af;
+        stroke-opacity: 0.8;
+      }
+
+      /* Enhanced node text with proper dark mode */
+      .node-text {
+        font-size: 13px !important;
+        font-weight: bold;
+        fill: #111827; /* Black for light mode */
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+        transition: fill 0.3s ease;
+        /* Halo in the surface color so overlapping/crowded labels stay legible */
+        paint-order: stroke;
+        stroke: var(--chart-bg-dm);
+        stroke-width: 3px;
+        stroke-linejoin: round;
+      }
+
+      [data-theme="dark"] .node-text {
+        fill: #f9fafb !important; /* White for dark mode */
+      }
+
+      /* Enhanced tooltip with dark mode */
+      .tooltip {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 13px !important;
+        font-weight: 500;
+        pointer-events: none;
+        z-index: 1000;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        transition: opacity 0.2s ease;
+        max-width: 250px;
+        line-height: 1.4;
+      }
+
+      [data-theme="dark"] .tooltip {
+        background: rgba(31, 41, 55, 0.95);
+        color: #f9fafb;
+        border: 1px solid rgba(156, 163, 175, 0.3);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      }
+
+      /* Hover effects */
+      .node-product:hover,
+      .node-version:hover,
+      .node-dependency:hover {
+        stroke-width: 3px;
+        filter: brightness(1.1);
+        cursor: pointer;
+      }
+
+      [data-theme="dark"] .node-product:hover,
+      [data-theme="dark"] .node-version:hover,
+      [data-theme="dark"] .node-dependency:hover {
+        filter: brightness(1.2) drop-shadow(0 0 6px currentColor);
+      }
+
+      /* === DARK MODE ADDITIONS - MINIMAL === */
+      :root {
+        --bg-primary-dm: #f3f4f6;
+        --bg-secondary-dm: #ffffff;
+        --text-primary-dm: #111827;
+        --text-secondary-dm: #6b7280;
+        --border-dm: #d1d5db;
+        --input-bg-dm: #ffffff;
+        --table-bg-dm: #ffffff;
+        --chart-bg-dm: #ffffff;
+        --mark-bg-dm: yellow;
+        --mark-text-dm: black;
+      }
+
+      [data-theme="dark"] {
+        /* VS Code Dark+ inspired: neutral near-black surfaces, no blue tint */
+        --bg-primary-dm: #1e1e1e;
+        --bg-secondary-dm: #252526;
+        --text-primary-dm: #d4d4d4;
+        --text-secondary-dm: #9d9d9d;
+        --border-dm: #3c3c3c;
+        --input-bg-dm: #3c3c3c;
+        --table-bg-dm: #252526;
+        --chart-bg-dm: #252526;
+        --mark-bg-dm: #613214;
+        --mark-text-dm: #ffd28a;
+      }
+
+      /* Dark mode toggle button */
+      .theme-toggle {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        background-color: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1.5rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+
+      .theme-toggle:hover {
+        background-color: #2563eb;
+        transform: scale(1.1);
+      }
+
+      /* Apply dark mode to key elements - keeping your exact classes */
+      .bg-gray-100 {
+        background-color: var(--bg-primary-dm) !important;
+        transition: background-color 0.3s ease;
+      }
+
+      .bg-white {
+        background-color: var(--bg-secondary-dm) !important;
+        transition: background-color 0.3s ease;
+      }
+
+      .text-gray-900,
+      .text-gray-800 {
+        color: var(--text-primary-dm) !important;
+        transition: color 0.3s ease;
+      }
+
+      .text-gray-700,
+      .text-gray-600,
+      .text-gray-500 {
+        color: var(--text-secondary-dm) !important;
+        transition: color 0.3s ease;
+      }
+
+      .text-blue-800,
+      .text-blue-700 {
+        color: #2a78d6 !important;
+        transition: color 0.3s ease;
+      }
+      [data-theme="dark"] .text-blue-800,
+      [data-theme="dark"] .text-blue-700 {
+        color: #3987e5 !important;
+      }
+
+      .border-gray-300,
+      .border-gray-200 {
+        border-color: var(--border-dm) !important;
+        transition: border-color 0.3s ease;
+      }
+
+      input[type="text"],
+      input[type="search"],
+      input[type="password"],
+      select,
+      textarea,
+      input.dt-search {
+        background-color: var(--input-bg-dm) !important;
+        border-color: var(--border-dm) !important;
+        color: var(--text-primary-dm) !important;
+        transition: all 0.3s ease;
+      }
+
+      input::placeholder,
+      textarea::placeholder {
+        color: var(--text-secondary-dm) !important;
+        opacity: 1;
+      }
+
+      table,
+      th,
+      td {
+        background-color: var(--table-bg-dm) !important;
+        color: var(--text-primary-dm) !important;
+        transition: all 0.3s ease;
+      }
+
+      /* Header reads as the recessed "page" tone, body as the elevated surface --
+         mirrors the light-theme header/body relationship instead of both matching. */
+      thead th {
+        background: var(--bg-primary-dm) !important;
+      }
+
+      .chart-container {
+        background: var(--chart-bg-dm) !important;
+        color: var(--text-primary-dm) !important;
+        transition: all 0.3s ease;
+      }
+
+      .chart-container h3 {
+        color: var(--text-primary-dm) !important;
+      }
+
+      mark {
+        background: var(--mark-bg-dm) !important;
+        color: var(--mark-text-dm) !important;
+      }
+
+      /* DataTables dark mode */
+      .dataTables_wrapper .dataTables_paginate .paginate_button {
+        color: var(--text-primary-dm) !important;
+        background-color: var(--table-bg-dm) !important;
+        border: 1px solid var(--border-dm) !important;
+      }
+
+      .dataTables_info,
+      .dataTables_length,
+      .dataTables_length label {
+        color: var(--text-secondary-dm) !important;
+      }
+
+      @media (max-width: 768px) {
+        .theme-toggle {
+          top: 10px;
+          right: 10px;
+          width: 40px;
+          height: 40px;
+          font-size: 1.2rem;
+        }
+        .dependency-graph {
+          height: 400px;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 min-h-screen">
+    <!-- Dark Mode Toggle -->
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+      <span id="themeIcon">🌙</span>
+    </button>
+
+    <div class="max-w-7xl mx-auto py-6 px-4">
+      <!-- Header -->
+      <div class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-blue-800 drop-shadow mb-2">
+          🛡️ VULVoyager
+        </h1>
+        <p class="text-gray-600 text-lg">BTGovernace</p>
+      </div>
+
+      <!-- Search Form -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <form method="POST" action="/" class="flex flex-wrap items-end gap-4">
+          <!-- Product Name -->
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Product Name *
+            </label>
+            <input
+              type="text"
+              name="product_name"
+              value="{{ product|default('') }}"
+              required
+              placeholder="e.g., apache, openssl"
+              class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- Version -->
+          <div class="flex-1 min-w-[150px]">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Version (Optional)
+            </label>
+            <input
+              type="text"
+              name="version"
+              value="{{ version|default('') }}"
+              placeholder="e.g., 2.4.1"
+              class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- API Key -->
+          <div class="flex-1 min-w-[200px] relative">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              NVD API Key (Optional)
+            </label>
+            <input
+              type="password"
+              id="api_key"
+              name="api_key"
+              value="{{ api_key|default('') }}"
+              placeholder="Enter API key"
+              class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 pr-10"
+            />
+            <button
+              type="button"
+              onclick="toggleApiKeyVisibility()"
+              class="absolute right-3 top-9 text-gray-600 hover:text-gray-800"
+            >
+              <span id="toggleIcon">👁️</span>
+            </button>
+            {% if api_key %}
+            <div class="text-green-600 text-xs mt-1">✓ API key saved</div>
+            {% endif %}
+          </div>
+
+          <!-- Search Button -->
+          <div class="mt-6">
+            <button
+              type="submit"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold transition"
+            >
+              Search
+            </button>
+          </div>
+        </form>
+      </div>
+      {% if results is not none %}
+      <!-- Statistics Dashboard -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stats-card border-blue-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600">Total CVEs</p>
+              <p class="text-2xl font-bold text-blue-600">
+                {{ results|length }}
+              </p>
+            </div>
+            <div class="text-blue-500 text-3xl">📊</div>
+          </div>
+        </div>
+
+        <div class="stats-card border-red-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600">KEV Vulnerabilities</p>
+              <p class="text-2xl font-bold text-red-600">
+                {{ analytics.risk_distribution.kev_count }}
+              </p>
+            </div>
+            <div class="text-red-500 text-3xl">🚨</div>
+          </div>
+        </div>
+
+        <div class="stats-card border-orange-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600">High EPSS (≥0.7)</p>
+              <p class="text-2xl font-bold text-orange-600">
+                {{ analytics.risk_distribution.high_epss }}
+              </p>
+            </div>
+            <div class="text-orange-500 text-3xl">⚡</div>
+          </div>
+        </div>
+
+        <div class="stats-card border-purple-500">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-600">Critical Severity</p>
+              <p class="text-2xl font-bold text-purple-600">
+                {{ analytics.severity_distribution.CRITICAL or 0 }}
+              </p>
+            </div>
+            <div class="text-purple-500 text-3xl">🔴</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist" aria-label="Results view">
+        <button type="button" class="tab-btn is-active" data-tab="list" role="tab"
+                aria-selected="true" aria-controls="tab-panel-list" id="tab-btn-list">CVE List</button>
+        <button type="button" class="tab-btn" data-tab="map" role="tab"
+                aria-selected="false" aria-controls="tab-panel-map" id="tab-btn-map">Product → Version Map</button>
+        <button type="button" class="tab-btn" data-tab="analytics" role="tab"
+                aria-selected="false" aria-controls="tab-panel-analytics" id="tab-btn-analytics">Analytics</button>
+      </div>
+
+      <div class="tab-panel" id="tab-panel-list" role="tabpanel" aria-labelledby="tab-btn-list" tabindex="0">
+      <!-- Manual Export Options (No Auto-Save) -->
+      <div class="mb-6 flex flex-wrap gap-4 justify-between items-center">
+        <span class="text-sm text-gray-600">
+          Showing {{ results|length }} vulnerabilities sorted by risk priority
+        </span>
+        <div class="flex gap-2">
+          <button
+            onclick="downloadCSV()"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold shadow"
+          >
+            📄 Download CSV
+          </button>
+          <button
+            onclick="downloadExcel()"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold shadow"
+          >
+            📊 Download Excel
+          </button>
+        </div>
+      </div>
+
+      <!-- Enhanced Data Table -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+        <table
+          id="cve_table"
+          class="min-w-full divide-y divide-gray-200 text-sm"
+        >
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-3 py-2">
+                CVE ID
+                <div><input class="dt-search" placeholder="Search CVE" /></div>
+              </th>
+              <th class="px-3 py-2">
+                Risk Level
+                <div><input class="dt-search" placeholder="Search Risk" /></div>
+              </th>
+              <th class="px-3 py-2">
+                CVSS
+                <div><input class="dt-search" placeholder="Search CVSS" /></div>
+              </th>
+              <th class="px-3 py-2">
+                EPSS Score
+                <div><input class="dt-search" placeholder="Search EPSS" /></div>
+              </th>
+              <th class="px-3 py-2">
+                Description
+                <div>
+                  <input class="dt-search" placeholder="Search Description" />
+                </div>
+              </th>
+              <th class="px-3 py-2">
+                Affected Products
+                <div>
+                  <input class="dt-search" placeholder="Search Products" />
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            {% for item in results %}
+            <tr
+              class="hover:bg-gray-50 transition {% if item.KEV_Status == 'Known Exploited' %}kev-row {% elif item.Severity == 'CRITICAL' %}critical-row{% endif %}"
+            >
+              <!-- CVE ID -->
+              <td class="px-3 py-3">
+                <a
+                  href="{{ item.Link }}"
+                  class="text-blue-700 hover:underline font-semibold"
+                  target="_blank"
+                >
+                  {{ item.CVE }}
+                </a>
+                <div class="text-xs text-gray-500 mt-1">
+                  {% if item.CVE %} Year: {{ item.CVE.split('-')[1] }} {% endif
+                  %} {% if item.KEV_Status == 'Known Exploited' %}
+                  <div class="text-xs text-red-600 font-semibold mt-1">✓ Known Exploited</div>
+                  {% endif %} {% if item.Patch_Reference_Found %}
+                  <div class="text-xs text-green-600 mt-1" title="NVD lists a reference tagged 'Patch' for this CVE -- not a verified vendor fix">
+                    📎 Patch ref. in NVD
+                  </div>
+                  {% else %}
+                  <div class="text-xs text-red-600 mt-1" title="No reference tagged 'Patch' found in NVD's data for this CVE">No patch ref. in NVD</div>
+                  {% endif %}
+                  <div class="flex gap-2 mt-1">
+                    <a href="{{ item.Link }}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">NVD</a>
+                    {% if item.EPSS_Score > 0 %}
+                    <a href="https://api.first.org/data/v1/epss?cve={{ item.CVE }}" target="_blank" class="text-green-700 hover:text-green-900 underline">EPSS</a>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+
+              <!-- Risk Level Badges -->
+              <td class="px-3 py-3">
+                {% if item.KEV_Status == 'Known Exploited' %}
+                <span class="badge-kev">🚨 KEV</span>
+                <br />
+                {% endif %} {% if item.Severity == 'CRITICAL' %}
+                <span class="badge-critical">CRITICAL</span>
+                {% elif item.Severity == 'HIGH' %}
+                <span class="badge-high">HIGH</span>
+                {% elif item.Severity == 'MEDIUM' %}
+                <span class="badge-medium">MEDIUM</span>
+                {% elif item.Severity == 'LOW' %}
+                <span class="badge-low">LOW</span>
+                {% else %}
+                <span class="badge-na">N/A</span>
+                {% endif %}
+              </td>
+
+              <!-- CVSS Score -->
+              <td class="px-3 py-3 text-center font-mono">{{ item.Score }}</td>
+
+              <!-- EPSS Score -->
+              <td class="px-3 py-3">
+                <div class="text-center">
+                  <span
+                    class="font-mono {% if item.EPSS_Score >= 0.7 %}epss-high {% elif item.EPSS_Score >= 0.3 %}epss-medium {% else %}epss-low{% endif %}"
+                  >
+                    {{ "%.3f"|format(item.EPSS_Score|float) }}
+                  </span>
+                </div>
+                <div class="text-xs text-gray-500 text-center">
+                  {{ "%.1f"|format((item.EPSS_Percentile|float) * 100) }}%ile
+                </div>
+              </td>
+
+              <!-- Description -->
+              <td class="px-3 py-3 max-w-xs">
+                <div
+                  class="text-sm text-gray-900 truncate"
+                  title="{{ item.Description }}"
+                >
+                  {{ item.Description[:150] }}{% if item.Description|length >
+                  150 %}...{% endif %}
+                </div>
+              </td>
+
+              <!-- Affected Products -->
+              <td class="px-3 py-3 max-w-xs">
+                <div
+                  class="text-sm text-gray-600 truncate"
+                  title="{{ item.Affected_Products }}"
+                >
+                  {{ item.Affected_Products[:100] }}{% if
+                  item.Affected_Products|length > 100 %}...{% endif %}
+                </div>
+                {% if item.Affected_Products_Detailed %}
+                <div class="text-xs text-gray-500 mt-1">
+                  Versions: {% for detail in item.Affected_Products_Detailed[:3]
+                  %} {{ detail.vendor }} {{ detail.version }}{% if not loop.last
+                  %}, {% endif %} {% endfor %} {% if
+                  item.Affected_Products_Detailed|length > 3 %}...{% endif %}
+                </div>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      </div>
+      <!-- /tab-panel-list -->
+
+      <div class="tab-panel" id="tab-panel-analytics" role="tabpanel" aria-labelledby="tab-btn-analytics" tabindex="0" hidden>
+      <!-- Analytics Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <!-- Risk Distribution Chart -->
+        <div class="chart-container">
+          <h3>📊 Risk Distribution</h3>
+          <div class="chart-canvas-wrap"><canvas id="riskChart"></canvas></div>
+        </div>
+
+        <!-- EPSS vs CVSS Scatter Plot -->
+        <div class="chart-container">
+          <h3>🎯 EPSS vs CVSS Correlation</h3>
+          <div class="chart-canvas-wrap"><canvas id="correlationChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Additional Analytics -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <!-- Vulnerability Trends Over Time -->
+        <div class="chart-container">
+          <h3>📈 Vulnerability Trends by Year</h3>
+          <div class="chart-canvas-wrap"><canvas id="trendsChart"></canvas></div>
+        </div>
+
+        <!-- Top Affected Vendors -->
+        <div class="chart-container">
+          <h3>🏢 Top Affected Vendors</h3>
+          <div class="chart-canvas-wrap"><canvas id="vendorChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Enhanced Features Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <!-- Most Vulnerable Versions -->
+        <div class="chart-container">
+          <h3>📦 Most Vulnerable Product Versions</h3>
+          <div class="chart-canvas-wrap"><canvas id="versionChart"></canvas></div>
+        </div>
+
+        <!-- Patch Reference Status (meter, not a 2-slice donut) -->
+        <div class="chart-container">
+          <h3>📎 Patch Reference Status (NVD)</h3>
+          <div class="flex-1 flex flex-col justify-center px-2">
+            <div class="flex items-end justify-between mb-2">
+              <span id="patchMeterPct" class="text-3xl font-bold" style="color:#0ca30c">0%</span>
+              <span id="patchMeterCounts" class="text-sm text-gray-500"></span>
+            </div>
+            <div class="w-full h-3 rounded-full patch-meter-track">
+              <div id="patchMeterFill" class="h-3 rounded-full" style="width:0%; background:#0ca30c; transition: width 0.4s ease;"></div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Share of CVEs with at least one NVD reference tagged "Patch" -- not a verified vendor fix.</p>
+          </div>
+        </div>
+      </div>
+      </div>
+      <!-- /tab-panel-analytics -->
+
+      <div class="tab-panel" id="tab-panel-map" role="tabpanel" aria-labelledby="tab-btn-map" tabindex="0" hidden>
+      <!-- Product -> Version Map (real NVD CPE data only) -->
+      <div class="mb-6">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 text-center">
+          🔗 Product → Version Map
+        </h3>
+        <div class="dependency-graph bg-white rounded-lg shadow-lg p-4" id="dependencyGraphContainer">
+          <button class="fullscreen-toggle" id="depGraphFullscreenBtn" type="button">⛶ Fullscreen</button>
+          <svg id="dependency-svg"></svg>
+        </div>
+        <div class="text-center mt-2">
+          <div class="inline-flex items-center space-x-4 text-sm">
+            <div class="flex items-center">
+              <div class="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
+              <span>Products</span>
+            </div>
+            <div class="flex items-center">
+              <div class="w-4 h-4 bg-green-500 rounded-full mr-2"></div>
+              <span>Versions</span>
+            </div>
+            <div class="flex items-center">
+              <div class="w-4 h-4 bg-red-500 rounded-full mr-2"></div>
+              <span>Critical/High Risk</span>
+            </div>
+          </div>
+          <p id="depGraphDensityHint" class="text-xs text-gray-500 mt-2" style="display:none">
+            Version labels are hidden for readability on large graphs -- hover a node for details.
+          </p>
+        </div>
+      </div>
+      </div>
+      <!-- /tab-panel-map -->
+      {% endif %}
+    </div>
+
+    <script>
+            {% if results %}
+            // Store results for manual export
+            const resultsData = {{ results | tojson }};
+            const productName = "{{ product }}";
+            const analytics = {{ analytics | tojson }};
+
+
+            // Manual CSV export only (no auto-save)
+            function downloadCSV() {
+                const params = new URLSearchParams({
+                    product: productName,
+                    data: JSON.stringify(resultsData)
+                });
+                window.open(`/download/csv?${params}`, '_blank');
+            }
+
+            function downloadExcel() {
+                const params = new URLSearchParams({
+                    product: productName,
+                    data: JSON.stringify(resultsData)
+                });
+                window.open(`/download/excel?${params}`, '_blank');
+            }
+
+
+            // Initialize FIXED Charts
+            $(document).ready(function () {
+                window.cveCharts = {};
+
+                // Risk Distribution Pie Chart
+                const ctx1 = document.getElementById('riskChart').getContext('2d');
+                window.cveCharts.risk = new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['KEV', 'High EPSS (≥0.7)', 'Medium EPSS (0.3-0.7)', 'Low EPSS (<0.3)'],
+                        datasets: [{
+                            data: [
+                                {{ analytics.risk_distribution.kev_count }},
+                                {{ analytics.risk_distribution.high_epss }},
+                                {{ analytics.risk_distribution.medium_epss }},
+                                {{ analytics.risk_distribution.low_epss }}
+                            ],
+                            backgroundColor: ['#d03b3b', '#ec835a', '#fab219', '#0ca30c']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
+                        }
+                    }
+                });
+
+
+                // EPSS vs CVSS Scatter Plot
+                const ctx2 = document.getElementById('correlationChart').getContext('2d');
+                const scatterData = {{ analytics.epss_cvss_data | tojson }};
+
+
+                window.cveCharts.correlation = new Chart(ctx2, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'KEV',
+                            data: scatterData.filter(d => d.kev),
+                            backgroundColor: '#d03b3b',
+                            pointRadius: 4,
+                            pointHitRadius: 14
+                        }, {
+                            label: 'Non-KEV',
+                            data: scatterData.filter(d => !d.kev),
+                            backgroundColor: '#0ca30c',
+                            pointRadius: 3,
+                            pointHitRadius: 14
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'CVSS Score' },
+                                min: 0, max: 10,
+                                ticks: { font: { size: 10 } }
+                            },
+                            y: {
+                                title: { display: true, text: 'EPSS Score' },
+                                min: 0, max: 1,
+                                ticks: { font: { size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
+                        }
+                    }
+                });
+
+
+                // Vulnerability Trends Over Time
+                const ctx3 = document.getElementById('trendsChart').getContext('2d');
+                const yearTrends = {{ analytics.year_trends | tojson }};
+                const years = Object.keys(yearTrends).sort();
+                const counts = years.map(year => yearTrends[year]);
+
+
+                window.cveCharts.trends = new Chart(ctx3, {
+                    type: 'line',
+                    data: {
+                        labels: years,
+                        datasets: [{
+                            label: 'CVE Count',
+                            data: counts,
+                            borderColor: '#2a78d6',
+                            backgroundColor: 'rgba(42, 120, 214, 0.1)',
+                            borderWidth: 2,
+                            borderCapStyle: 'round',
+                            tension: 0.1,
+                            fill: true,
+                            pointRadius: 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'CVEs' },
+                                ticks: { font: { size: 10 } }
+                            },
+                            x: {
+                                title: { display: true, text: 'Year' },
+                                ticks: { font: { size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
+                        }
+                    }
+                });
+
+
+                // Top Affected Vendors
+                const ctx4 = document.getElementById('vendorChart').getContext('2d');
+                const vendorData = {{ analytics.vendor_analysis | tojson }};
+                const topVendors = Object.entries(vendorData)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 8);
+
+
+                window.cveCharts.vendor = new Chart(ctx4, {
+                    type: 'bar',
+                    data: {
+                        labels: topVendors.map(v => v[0]),
+                        datasets: [{
+                            label: 'CVE Count',
+                            data: topVendors.map(v => v[1]),
+                            backgroundColor: '#2a78d6',
+                            borderRadius: 4,
+                            maxBarThickness: 24,
+                            barPercentage: 0.7,
+                            categoryPercentage: 0.8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'CVEs' },
+                                ticks: { font: { size: 10 } }
+                            },
+                            y: {
+                                ticks: { font: { size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
+                        }
+                    }
+                });
+
+                // NEW: Most Vulnerable Versions Chart
+                const ctx5 = document.getElementById('versionChart').getContext('2d');
+                const versionData = analytics.top_vulnerable_versions || {};
+                const topVersions = Object.entries(versionData)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 8);
+
+                window.cveCharts.version = new Chart(ctx5, {
+                    type: 'bar',
+                    data: {
+                        labels: topVersions.map(v => v[0].length > 15 ? v[0].substring(0, 15) + '...' : v[0]),
+                        datasets: [{
+                            label: 'CVE Count',
+                            data: topVersions.map(v => v[1]),
+                            backgroundColor: '#2a78d6',
+                            borderRadius: 4,
+                            maxBarThickness: 24,
+                            barPercentage: 0.7,
+                            categoryPercentage: 0.8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'CVEs' },
+                                ticks: { font: { size: 10 } }
+                            },
+                            x: {
+                                ticks: { font: { size: 10 } }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const fullLabel = topVersions[context.dataIndex][0];
+                                        return `${fullLabel}: ${context.parsed.y} CVEs`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Patch Reference meter (replaces the old 2-slice donut)
+                const patchData = analytics.patch_status || {patched: 0, unpatched: 0};
+                const patchTotal = patchData.patched + patchData.unpatched;
+                const patchPct = patchTotal ? Math.round((patchData.patched / patchTotal) * 100) : 0;
+                document.getElementById('patchMeterPct').textContent = patchPct + '%';
+                document.getElementById('patchMeterFill').style.width = patchPct + '%';
+                document.getElementById('patchMeterCounts').textContent =
+                    `${patchData.patched} of ${patchTotal} CVEs`;
+
+                // Product -> Version Map (D3 force-directed graph)
+                const dependencyData = analytics.dependency_graph;
+
+                if (dependencyData && dependencyData.nodes && dependencyData.nodes.length > 0) {
+                    const svgEl = document.getElementById('dependency-svg');
+                    const graphContainer = document.getElementById('dependencyGraphContainer');
+                    const svg = d3.select(svgEl);
+                    const zoomLayer = svg.append("g").attr("class", "zoom-layer");
+
+                    // Create tooltip
+                    const tooltip = d3.select("body").append("div")
+                        .attr("class", "tooltip")
+                        .style("opacity", 0);
+
+                    function currentSize() {
+                        const rect = svgEl.getBoundingClientRect();
+                        return { width: rect.width || 800, height: rect.height || 500 };
+                    }
+
+                    let { width, height } = currentSize();
+                    svg.attr("viewBox", `0 0 ${width} ${height}`);
+
+                    // Hub nodes with many versions need proportionally more room, or
+                    // labels/nodes crowd into an unreadable cluster near the center.
+                    const isDense = dependencyData.nodes.length > 25;
+                    const linkDistance = Math.min(200, 70 + dependencyData.nodes.length * 2.5);
+                    const densityHint = document.getElementById('depGraphDensityHint');
+                    if (densityHint) densityHint.style.display = isDense ? '' : 'none';
+
+                    const simulation = d3.forceSimulation(dependencyData.nodes)
+                        .force("link", d3.forceLink(dependencyData.links).id(d => d.id).distance(linkDistance))
+                        .force("charge", d3.forceManyBody().strength(-260))
+                        .force("center", d3.forceCenter(width / 2, height / 2))
+                        .force("collision", d3.forceCollide().radius(28));
+
+                    const link = zoomLayer.append("g")
+                        .selectAll("line")
+                        .data(dependencyData.links)
+                        .enter().append("line")
+                        .attr("class", "link");
+
+                    const node = zoomLayer.append("g")
+                        .selectAll("circle")
+                        .data(dependencyData.nodes)
+                        .enter().append("circle")
+                        .attr("r", d => d.type === 'product' ? 12 : 8)
+                        .attr("class", d => {
+                            let baseClass = `node-${d.type}`;
+                            if (d.severity === 'CRITICAL') {
+                                baseClass += ' node-critical';
+                            } else if (d.severity === 'HIGH') {
+                                baseClass += ' node-high';
+                            }
+                            return baseClass;
+                        })
+                        .on("mouseover", function(event, d) {
+                            let tooltipText = `${d.id}`;
+                            if (d.type === 'version' && d.cve_id) {
+                                tooltipText += `<br/>CVE: ${d.cve_id}<br/>Severity: ${d.severity}`;
+                                if (d.epss_score) tooltipText += `<br/>EPSS: ${d.epss_score.toFixed(3)}`;
+                                if (d.patch_reference_found) tooltipText += `<br/>Patch ref. in NVD`;
+                            } else if (d.type === 'product' && d.cve_count) {
+                                tooltipText += `<br/>CVEs: ${d.cve_count}`;
+                            }
+
+                            tooltip.transition().duration(200).style("opacity", .9);
+                            tooltip.html(tooltipText)
+                                .style("left", (event.pageX + 10) + "px")
+                                .style("top", (event.pageY - 28) + "px");
+                        })
+                        .on("mouseout", function(d) {
+                            tooltip.transition().duration(500).style("opacity", 0);
+                        })
+                        .call(d3.drag()
+                            .on("start", dragstarted)
+                            .on("drag", dragged)
+                            .on("end", dragended));
+
+                    // Labels: full product name / version string (ellipsis past ~13 chars),
+                    // relying on the tooltip above for the rest of the detail. When the
+                    // graph is dense, only product labels render -- version labels alone
+                    // would overlap into an unreadable cluster, so those rely on hover.
+                    const text = zoomLayer.append("g")
+                        .selectAll("text")
+                        .data(isDense ? dependencyData.nodes.filter(d => d.type === 'product') : dependencyData.nodes)
+                        .enter().append("text")
+                        .attr("class", "node-text")
+                        .text(d => {
+                            const parts = d.id.split(':');
+                            const label = parts[parts.length - 1];
+                            return label.length > 13 ? label.substring(0, 12) + '…' : label;
+                        });
+
+                    // Zoom/pan so dense graphs stay usable
+                    const zoomBehavior = d3.zoom()
+                        .scaleExtent([0.3, 4])
+                        .on("zoom", (event) => zoomLayer.attr("transform", event.transform));
+                    svg.call(zoomBehavior);
+
+                    // A hub with many spokes can lay out larger than the visible box --
+                    // auto-fit the content once positions settle, instead of leaving it
+                    // stuck at 1:1 zoom where most/all nodes render off-screen.
+                    function fitToView() {
+                        const xs = dependencyData.nodes.map(d => d.x).filter(Number.isFinite);
+                        const ys = dependencyData.nodes.map(d => d.y).filter(Number.isFinite);
+                        if (!xs.length) return;
+                        const pad = 40;
+                        const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
+                        const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+                        const contentW = Math.max(1, maxX - minX);
+                        const contentH = Math.max(1, maxY - minY);
+                        const scale = Math.max(0.3, Math.min(1.2, Math.min(width / contentW, height / contentH)));
+                        const tx = width / 2 - scale * (minX + maxX) / 2;
+                        const ty = height / 2 - scale * (minY + maxY) / 2;
+                        svg.transition().duration(300)
+                            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+                    }
+                    simulation.on("end", fitToView);
+
+                    simulation.on("tick", () => {
+                        link
+                            .attr("x1", d => d.source.x)
+                            .attr("y1", d => d.source.y)
+                            .attr("x2", d => d.target.x)
+                            .attr("y2", d => d.target.y);
+
+                        node
+                            .attr("cx", d => d.x)
+                            .attr("cy", d => d.y);
+
+                        text
+                            .attr("x", d => d.x)
+                            .attr("y", d => d.y);
+                    });
+
+                    function dragstarted(event, d) {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    }
+
+                    function dragged(event, d) {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    }
+
+                    function dragended(event, d) {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    }
+
+                    function resizeGraph() {
+                        const size = currentSize();
+                        width = size.width;
+                        height = size.height;
+                        svg.attr("viewBox", `0 0 ${width} ${height}`);
+                        simulation.force("center", d3.forceCenter(width / 2, height / 2));
+                        simulation.alpha(0.5).restart();
+                        fitToView(); // immediate rough fit; "end" refines it once settled
+                    }
+                    window.resizeDependencyGraph = resizeGraph;
+
+                    const fullscreenBtn = document.getElementById('depGraphFullscreenBtn');
+                    fullscreenBtn.addEventListener('click', () => {
+                        const isFullscreen = graphContainer.classList.toggle('is-fullscreen');
+                        fullscreenBtn.textContent = isFullscreen ? '⤫ Exit fullscreen' : '⛶ Fullscreen';
+                        document.body.style.overflow = isFullscreen ? 'hidden' : '';
+                        // Wait for the layout/size transition to settle before re-centering
+                        setTimeout(resizeGraph, 50);
+                    });
+
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key === 'Escape' && graphContainer.classList.contains('is-fullscreen')) {
+                            graphContainer.classList.remove('is-fullscreen');
+                            fullscreenBtn.textContent = '⛶ Fullscreen';
+                            document.body.style.overflow = '';
+                            setTimeout(resizeGraph, 50);
+                        }
+                    });
+
+                    window.addEventListener('resize', resizeGraph);
+                }
+
+                // Tab switching -- resize charts/graph on first activation since
+                // Chart.js and the D3 graph both size incorrectly if constructed
+                // while their container is display:none.
+                (function () {
+                    const tabButtons = document.querySelectorAll('.tab-btn');
+                    const panels = {
+                        list: document.getElementById('tab-panel-list'),
+                        map: document.getElementById('tab-panel-map'),
+                        analytics: document.getElementById('tab-panel-analytics'),
+                    };
+                    const activatedOnce = { map: false, analytics: false };
+
+                    function activateTab(name) {
+                        // Leaving the map tab mid-fullscreen would orphan the fixed
+                        // overlay under a display:none ancestor and leave the body
+                        // scroll-lock stuck -- exit fullscreen first via its own handler.
+                        if (name !== 'map' && panels.map && !panels.map.hidden) {
+                            const gc = document.getElementById('dependencyGraphContainer');
+                            if (gc && gc.classList.contains('is-fullscreen')) {
+                                document.getElementById('depGraphFullscreenBtn').click();
+                            }
+                        }
+
+                        tabButtons.forEach(btn => {
+                            const active = btn.dataset.tab === name;
+                            btn.classList.toggle('is-active', active);
+                            btn.setAttribute('aria-selected', String(active));
+                        });
+                        Object.entries(panels).forEach(([key, panel]) => {
+                            if (panel) panel.hidden = key !== name;
+                        });
+
+                        if (name === 'analytics' && !activatedOnce.analytics) {
+                            activatedOnce.analytics = true;
+                            Object.values(window.cveCharts || {}).forEach(c => c && c.resize());
+                        }
+                        if (name === 'map' && !activatedOnce.map && typeof window.resizeDependencyGraph === 'function') {
+                            activatedOnce.map = true;
+                            window.resizeDependencyGraph();
+                        }
+                    }
+
+                    tabButtons.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+                })();
+            });
+            {% endif %}
+
+
+            // DataTable initialization
+            $(document).ready(function () {
+                let table = $("#cve_table").DataTable({
+                    paging: true,
+                    searching: true,
+                    info: true,
+                    order: [[0, "desc"]],
+                    lengthMenu: [10, 25, 50, 100],
+                    scrollX: true,
+                    searchHighlight: false,
+                    pageLength: 25,
+                    columnDefs: [
+                        { targets: [2, 3], className: "text-center" },
+                    ]
+                });
+
+
+                // Per-column search
+                table.columns().every(function(idx) {
+                    $('input', this.header()).on('keyup change', function() {
+                        table.column(idx).search(this.value).draw();
+                    });
+                });
+
+
+                // Manual highlighting
+                table.on('draw', function () {
+                    const body = $(table.table().body());
+                    const markInstance = new Mark(body[0]);
+
+
+                    markInstance.unmark({
+                        done: function () {
+                            const globalSearch = table.search();
+                            if (globalSearch) {
+                                markInstance.mark(globalSearch);
+                            }
+
+
+                            table.columns().every(function () {
+                                const colSearch = this.search();
+                                if (colSearch) {
+                                    const colIndex = this.index() + 1;
+                                    body.find('td:nth-child(' + colIndex + ')').each(function () {
+                                        markInstance.mark(colSearch, {
+                                            element: 'mark',
+                                            separateWordSearch: false,
+                                            acrossElements: true
+                                        }, this);
+                                    });
+                                }
+                            });
+                        }
+                    });
+                });
+
+
+                // Enable Ctrl+A in search inputs
+                $('input.dt-search').on('keydown', function(e) {
+                    if (e.ctrlKey && e.keyCode === 65) {
+                        e.stopPropagation();
+                        this.select();
+                        return true;
+                    }
+                });
+                $('input.dt-search').attr('tabindex', '0');
+
+
+                // Show loading state when form is submitted
+                $('form').on('submit', function() {
+                    $('button[type="submit"]').html('🔍 Searching...').prop('disabled', true);
+                });
+            });
+
+            // API Key Management with localStorage
+      document.addEventListener('DOMContentLoaded', function() {
+          const apiKeyInput = document.getElementById('api_key');
+
+          // On page load, check if API key exists in localStorage
+          const savedApiKey = localStorage.getItem('nvd_api_key');
+          if (savedApiKey && !apiKeyInput.value) {
+              apiKeyInput.value = savedApiKey;
+          }
+      });
+
+      // Save API key to localStorage when form is submitted
+      document.querySelector('form').addEventListener('submit', function() {
+          const apiKey = document.getElementById('api_key').value;
+          if (apiKey) {
+              localStorage.setItem('nvd_api_key', apiKey);
+          }
+      });
+
+      // Toggle API key visibility
+      function toggleApiKeyVisibility() {
+          const apiKeyInput = document.getElementById('api_key');
+          const toggleIcon = document.getElementById('toggleIcon');
+
+          if (apiKeyInput.type === 'password') {
+              apiKeyInput.type = 'text';
+              toggleIcon.textContent = '🙈';
+          } else {
+              apiKeyInput.type = 'password';
+              toggleIcon.textContent = '👁️';
+          }
+      }
+
+      // Clear API key from both localStorage and session
+      function clearApiKey() {
+          if (confirm('Are you sure you want to clear the saved API key?')) {
+              // Clear from localStorage
+              localStorage.removeItem('nvd_api_key');
+
+              // Clear from Flask session via API call
+              fetch('/clear-api-key', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  }
+              })
+              .then(response => response.json())
+              .then(data => {
+                  // Clear the input field
+                  document.getElementById('api_key').value = '';
+
+                  // Show success message
+                  alert('API key cleared successfully!');
+
+                  // Reload the page
+                  window.location.reload();
+              })
+              .catch(error => {
+                  console.error('Error clearing API key:', error);
+                  alert('Error clearing API key. Please try again.');
+              });
+          }
+      }
+    </script>
+
+    <script>
+      // === DARK MODE FUNCTIONALITY ===
+      class DarkModeToggle {
+        constructor() {
+          this.themeToggle = document.getElementById("themeToggle");
+          this.themeIcon = document.getElementById("themeIcon");
+          this.init();
+        }
+
+        init() {
+          // Load saved theme or default to dark
+          const savedTheme = localStorage.getItem("theme") || "dark";
+          this.setTheme(savedTheme);
+
+          // Add click listener
+          this.themeToggle.addEventListener("click", () => {
+            this.toggleTheme();
+          });
+
+          // Listen for system theme changes
+          const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+          mediaQuery.addListener((e) => {
+            if (!localStorage.getItem("theme")) {
+              this.setTheme(e.matches ? "dark" : "light");
+            }
+          });
+        }
+
+        setTheme(theme) {
+          document.documentElement.setAttribute("data-theme", theme);
+          this.themeIcon.textContent = theme === "dark" ? "☀️" : "🌙";
+          localStorage.setItem("theme", theme);
+
+          // Update charts after a short delay
+          setTimeout(() => this.updateChartColors(theme), 100);
+        }
+
+        toggleTheme() {
+          const currentTheme =
+            document.documentElement.getAttribute("data-theme");
+          const newTheme = currentTheme === "dark" ? "light" : "dark";
+          this.setTheme(newTheme);
+        }
+
+        updateChartColors(theme) {
+          const textColor = theme === "dark" ? "#d1d5db" : "#374151";
+          const gridColor = theme === "dark" ? "#374151" : "#e5e7eb";
+
+          Object.values(window.cveCharts || {}).forEach((chart) => {
+            if (chart && chart.options) {
+              if (chart.options.scales) {
+                Object.values(chart.options.scales).forEach((scale) => {
+                  if (scale.ticks) scale.ticks.color = textColor;
+                  if (scale.grid) scale.grid.color = gridColor;
+                });
+              }
+              if (chart.options.plugins && chart.options.plugins.legend) {
+                chart.options.plugins.legend.labels.color = textColor;
+              }
+              chart.update();
+            }
+          });
+        }
+      }
+
+      // Initialize dark mode when DOM is ready
+      document.addEventListener("DOMContentLoaded", function () {
+        window.darkModeToggle = new DarkModeToggle();
+      });
+    </script>
+  </body>
+</html>

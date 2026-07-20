@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./VULVoyager.exe)",
+      "Bash(taskkill //PID 12700 //F)",
+      "Bash(taskkill //PID 10972 //F)"
+    ]
+  }
+}
