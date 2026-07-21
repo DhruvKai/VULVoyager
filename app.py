@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, Alignment, PatternFill
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 import requests
 import urllib3
 import io
@@ -40,7 +40,8 @@ def get_app_dir():
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-load_dotenv(os.path.join(get_app_dir(), "config.env"))
+CONFIG_ENV_PATH = os.path.join(get_app_dir(), "config.env")
+load_dotenv(CONFIG_ENV_PATH)
 
 app = Flask(__name__,
             template_folder=resource_path("templates"),
@@ -49,26 +50,24 @@ app = Flask(__name__,
 app.secret_key = secrets.token_hex(32)  # Generate secure secret key
 app.config['SESSION_PERMANENT'] = True  # Keep session even after browser closes
 
+
+def get_persisted_api_key():
+    """API key saved to config.env (survives app restarts), if any."""
+    key = os.getenv("NVD_API_KEY", "").strip()
+    return key if key and key != "your_actual_api_key_here" else ""
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
         product = request.form.get("product_name", "").strip()
         version = request.form.get("version", "").strip()
         version = version if version else None
-        
-        # Get API key from form submission
-        api_key = request.form.get("api_key", "").strip()
-        
-        # If API key provided, save it to session
-        if api_key:
-            session['api_key'] = api_key
-        # If no API key in form, check session
-        elif 'api_key' in session:
-            api_key = session['api_key']
-        else:
-            # No API key available
-            api_key = None
-        
+
+        # API key comes from the Settings tab, not the search form -- prefer
+        # the current session, falling back to whatever's persisted on disk.
+        api_key = session.get('api_key') or get_persisted_api_key() or None
+
         # Initialize scanner with the API key
         scanner = EnhancedCVEScanner(api_key=api_key)
         
@@ -98,18 +97,38 @@ def index():
             analytics=analytics,
             product=product,
             version=version or "",
-            api_key=session.get('api_key', '')  # Pass saved API key to template
+            api_key=api_key or "",
+            api_key_persisted=bool(get_persisted_api_key())
         )
-    
-    # For GET request, check if API key exists in session
-    saved_api_key = session.get('api_key', '')
-    return render_template("index.html", results=None, api_key=saved_api_key)
+
+    # For GET request, prefer the session key, falling back to the one saved on disk
+    saved_api_key = session.get('api_key') or get_persisted_api_key()
+    return render_template(
+        "index.html",
+        results=None,
+        api_key=saved_api_key,
+        api_key_persisted=bool(get_persisted_api_key())
+    )
+
+@app.route('/api/save-key', methods=['POST'])
+def save_api_key():
+    """Persist the NVD API key to config.env so it survives app restarts."""
+    data = request.get_json(silent=True) or {}
+    api_key = (data.get('api_key') or "").strip()
+    if not api_key:
+        return jsonify({'status': 'error', 'message': 'API key is required'}), 400
+
+    set_key(CONFIG_ENV_PATH, "NVD_API_KEY", api_key)
+    os.environ["NVD_API_KEY"] = api_key
+    session['api_key'] = api_key
+    return jsonify({'status': 'success', 'message': 'API key saved'})
 
 @app.route('/clear-api-key', methods=['POST'])
 def clear_api_key():
-    """Clear the API key from session"""
-    if 'api_key' in session:
-        session.pop('api_key')
+    """Clear the API key from the session and from disk"""
+    session.pop('api_key', None)
+    set_key(CONFIG_ENV_PATH, "NVD_API_KEY", "")
+    os.environ["NVD_API_KEY"] = ""
     return jsonify({'status': 'success', 'message': 'API key cleared'})
 
 

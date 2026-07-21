@@ -214,7 +214,8 @@
         outline: 2px solid #2a78d6;
         outline-offset: 2px;
       }
-      .tab-panel[hidden] {
+      .tab-panel[hidden],
+      .site-tab-panel[hidden] {
         display: none !important;
       }
 
@@ -581,6 +582,16 @@
         <p class="text-gray-600 text-lg">BTGovernace</p>
       </div>
 
+      <!-- Site-level Tabs -->
+      <div class="tabs" role="tablist" aria-label="Main view">
+        <button type="button" class="tab-btn is-active" data-site-tab="scanner" role="tab"
+                aria-selected="true" aria-controls="site-panel-scanner" id="site-tab-btn-scanner">🔍 Scanner</button>
+        <button type="button" class="tab-btn" data-site-tab="settings" role="tab"
+                aria-selected="false" aria-controls="site-panel-settings" id="site-tab-btn-settings">⚙️ Settings</button>
+      </div>
+
+      <div class="site-tab-panel" id="site-panel-scanner" role="tabpanel" aria-labelledby="site-tab-btn-scanner" tabindex="0">
+
       <!-- Search Form -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <form method="POST" action="/" class="flex flex-wrap items-end gap-4">
@@ -613,41 +624,23 @@
             />
           </div>
 
-          <!-- API Key -->
-          <div class="flex-1 min-w-[200px] relative">
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-              NVD API Key (Optional)
-            </label>
-            <input
-              type="password"
-              id="api_key"
-              name="api_key"
-              value="{{ api_key|default('') }}"
-              placeholder="Enter API key"
-              class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 pr-10"
-            />
-            <button
-              type="button"
-              onclick="toggleApiKeyVisibility()"
-              class="absolute right-3 top-9 text-gray-600 hover:text-gray-800"
-            >
-              <span id="toggleIcon">👁️</span>
-            </button>
-            {% if api_key %}
-            <div class="text-green-600 text-xs mt-1">✓ API key saved</div>
-            {% endif %}
-          </div>
-
           <!-- Search Button -->
-          <div class="mt-6">
+          <div class="min-w-[150px]">
             <button
               type="submit"
-              class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold transition"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold transition"
             >
               Search
             </button>
           </div>
         </form>
+        <p class="text-xs text-gray-500 mt-3">
+          {% if api_key_persisted %}
+          ✓ Using the NVD API key saved in <a href="#" onclick="switchToSettingsTab(event)" class="text-blue-600 hover:underline">Settings</a>.
+          {% else %}
+          No NVD API key saved -- searches are rate-limited. Add one in <a href="#" onclick="switchToSettingsTab(event)" class="text-blue-600 hover:underline">Settings</a>.
+          {% endif %}
+        </p>
       </div>
       {% if results is not none %}
       <!-- Statistics Dashboard -->
@@ -967,6 +960,58 @@
       </div>
       <!-- /tab-panel-map -->
       {% endif %}
+      </div>
+      <!-- /site-panel-scanner -->
+
+      <div class="site-tab-panel" id="site-panel-settings" role="tabpanel" aria-labelledby="site-tab-btn-settings" tabindex="0" hidden>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 max-w-xl">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">NVD API Key</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Optional -- raises the NVD rate limit from one request per 6s to one per 0.6s.
+            Saving writes it to <code>config.env</code> next to the app, so it is still
+            there the next time you open VULVoyager.
+          </p>
+
+          <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+          <div class="relative mb-4">
+            <input
+              type="password"
+              id="api_key"
+              value="{{ api_key|default('') }}"
+              placeholder="Enter API key"
+              class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 pr-10"
+            />
+            <button
+              type="button"
+              onclick="toggleApiKeyVisibility()"
+              class="absolute right-3 top-2.5 text-gray-600 hover:text-gray-800"
+            >
+              <span id="toggleIcon">👁️</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onclick="saveApiKey()"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold transition"
+            >
+              💾 Save API Key
+            </button>
+            <button
+              type="button"
+              onclick="clearApiKey()"
+              class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded font-semibold transition"
+            >
+              Clear
+            </button>
+            <span id="apiKeyStatus" class="text-sm {% if api_key_persisted %}text-green-600{% else %}text-gray-500{% endif %}">
+              {% if api_key_persisted %}✓ Saved to disk{% else %}Not saved{% endif %}
+            </span>
+          </div>
+        </div>
+      </div>
+      <!-- /site-panel-settings -->
     </div>
 
     <script>
@@ -1518,25 +1563,6 @@
                 });
             });
 
-            // API Key Management with localStorage
-      document.addEventListener('DOMContentLoaded', function() {
-          const apiKeyInput = document.getElementById('api_key');
-
-          // On page load, check if API key exists in localStorage
-          const savedApiKey = localStorage.getItem('nvd_api_key');
-          if (savedApiKey && !apiKeyInput.value) {
-              apiKeyInput.value = savedApiKey;
-          }
-      });
-
-      // Save API key to localStorage when form is submitted
-      document.querySelector('form').addEventListener('submit', function() {
-          const apiKey = document.getElementById('api_key').value;
-          if (apiKey) {
-              localStorage.setItem('nvd_api_key', apiKey);
-          }
-      });
-
       // Toggle API key visibility
       function toggleApiKeyVisibility() {
           const apiKeyInput = document.getElementById('api_key');
@@ -1551,36 +1577,83 @@
           }
       }
 
-      // Clear API key from both localStorage and session
+      function setApiKeyStatus(text, saved) {
+          const status = document.getElementById('apiKeyStatus');
+          status.textContent = text;
+          status.className = 'text-sm ' + (saved ? 'text-green-600' : 'text-gray-500');
+      }
+
+      // Persist the API key to config.env on disk (survives closing the app)
+      function saveApiKey() {
+          const apiKey = document.getElementById('api_key').value.trim();
+          if (!apiKey) {
+              alert('Enter an API key first.');
+              return;
+          }
+          fetch('/api/save-key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ api_key: apiKey })
+          })
+          .then(response => response.json())
+          .then(data => {
+              if (data.status === 'success') {
+                  setApiKeyStatus('✓ Saved to disk', true);
+              } else {
+                  setApiKeyStatus(data.message || 'Failed to save', false);
+              }
+          })
+          .catch(error => {
+              console.error('Error saving API key:', error);
+              setApiKeyStatus('Error saving API key', false);
+          });
+      }
+
+      // Clear the API key from both the session and config.env on disk
       function clearApiKey() {
-          if (confirm('Are you sure you want to clear the saved API key?')) {
-              // Clear from localStorage
-              localStorage.removeItem('nvd_api_key');
+          if (!confirm('Are you sure you want to clear the saved API key?')) return;
 
-              // Clear from Flask session via API call
-              fetch('/clear-api-key', {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json'
-                  }
-              })
-              .then(response => response.json())
-              .then(data => {
-                  // Clear the input field
-                  document.getElementById('api_key').value = '';
+          fetch('/clear-api-key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' }
+          })
+          .then(response => response.json())
+          .then(() => {
+              document.getElementById('api_key').value = '';
+              setApiKeyStatus('Not saved', false);
+          })
+          .catch(error => {
+              console.error('Error clearing API key:', error);
+              alert('Error clearing API key. Please try again.');
+          });
+      }
 
-                  // Show success message
-                  alert('API key cleared successfully!');
+      // Site-level tabs: Scanner / Settings
+      function switchToSettingsTab(event) {
+          if (event) event.preventDefault();
+          document.getElementById('site-tab-btn-settings').click();
+      }
 
-                  // Reload the page
-                  window.location.reload();
-              })
-              .catch(error => {
-                  console.error('Error clearing API key:', error);
-                  alert('Error clearing API key. Please try again.');
+      (function () {
+          const siteTabButtons = document.querySelectorAll('[data-site-tab]');
+          const sitePanels = {
+              scanner: document.getElementById('site-panel-scanner'),
+              settings: document.getElementById('site-panel-settings'),
+          };
+
+          function activateSiteTab(name) {
+              siteTabButtons.forEach(btn => {
+                  const active = btn.dataset.siteTab === name;
+                  btn.classList.toggle('is-active', active);
+                  btn.setAttribute('aria-selected', String(active));
+              });
+              Object.entries(sitePanels).forEach(([key, panel]) => {
+                  if (panel) panel.hidden = key !== name;
               });
           }
-      }
+
+          siteTabButtons.forEach(btn => btn.addEventListener('click', () => activateSiteTab(btn.dataset.siteTab)));
+      })();
     </script>
 
     <script>
