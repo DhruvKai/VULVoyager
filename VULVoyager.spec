@@ -1,8 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_data_files
 
 datas = [('templates', 'templates'), ('icon.ico', '.')]
+# CA bundle for HTTPS certificate verification against NVD / CISA / FIRST
+datas += collect_data_files('certifi')
 if os.path.isdir('static'):
     datas += [('static', 'static')]
 binaries = []

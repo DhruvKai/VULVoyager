@@ -540,6 +540,122 @@
         color: var(--mark-text-dm) !important;
       }
 
+      /* Scan progress, notices, version-match badges, CVE detail panel.
+         Built on the theme tokens above so they follow light/dark automatically. */
+      .progress-track {
+        height: 0.5rem;
+        border-radius: 9999px;
+        background: var(--border-dm);
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 0;
+        background: #2a78d6;
+        transition: width 0.4s ease;
+      }
+      .notice {
+        border: 1px solid;
+        border-left-width: 4px;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+        color: var(--text-primary-dm);
+      }
+      .notice ul { margin: 0; padding-left: 1.1rem; list-style: disc; }
+      .notice-warn { border-color: #fab219; background: rgba(250, 178, 25, 0.12); }
+      .notice-error { border-color: #d03b3b; background: rgba(208, 59, 59, 0.1); }
+      .notice-info { border-color: #2a78d6; background: rgba(42, 120, 214, 0.1); }
+
+      .vm-badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 0.05rem 0.5rem;
+        border-radius: 9999px;
+        margin-top: 0.25rem;
+      }
+      .vm-affected { background: #d03b3b; color: #fff; }
+      .vm-unverified { background: #fab219; color: #111827; }
+
+      .details-btn {
+        background: none;
+        border: none;
+        padding: 0;
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #2a78d6;
+        cursor: pointer;
+      }
+      .details-btn:hover { text-decoration: underline; }
+      [data-theme="dark"] .details-btn { color: #3987e5; }
+
+      .cve-details {
+        text-align: left;
+        padding: 0.5rem 0.25rem;
+        white-space: normal;
+        font-size: 0.85rem;
+        color: var(--text-primary-dm);
+      }
+      .cve-details-loading {
+        padding: 0.75rem;
+        color: var(--text-secondary-dm);
+        font-size: 0.85rem;
+      }
+      .cve-details .cve-desc { margin-bottom: 0.9rem; line-height: 1.5; }
+      .cve-details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 0.75rem;
+      }
+      .cve-card {
+        background: var(--bg-primary-dm);
+        border: 1px solid var(--border-dm);
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+      }
+      .cve-card h4 {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-secondary-dm);
+        margin-bottom: 0.4rem;
+      }
+      .cve-details a { color: #2a78d6; text-decoration: none; }
+      [data-theme="dark"] .cve-details a { color: #3987e5; }
+      .cve-details a:hover { text-decoration: underline; }
+      .cve-card code {
+        font-size: 0.75rem;
+        word-break: break-all;
+        color: var(--text-primary-dm);
+      }
+      .cve-card p { margin: 0.2rem 0; }
+      .cve-muted { color: var(--text-secondary-dm); }
+      .cve-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+      .cve-chip {
+        border: 1px solid var(--border-dm);
+        border-radius: 9999px;
+        padding: 0.05rem 0.5rem;
+        font-size: 0.72rem;
+        background: var(--bg-secondary-dm);
+      }
+      .cve-chip-danger { background: #d03b3b; border-color: #d03b3b; color: #fff; }
+      .cve-refs { margin-top: 0.75rem; }
+      .cve-ref-group { margin-bottom: 0.5rem; }
+      .cve-ref-group summary { cursor: pointer; font-weight: 600; }
+      .cve-ref-list {
+        max-height: 11rem;
+        overflow-y: auto;
+        margin: 0.3rem 0 0 1rem;
+        padding: 0;
+        list-style: disc;
+        font-size: 0.78rem;
+        word-break: break-all;
+      }
+
       /* DataTables dark mode */
       .dataTables_wrapper .dataTables_paginate .paginate_button {
         color: var(--text-primary-dm) !important;
@@ -594,7 +710,7 @@
 
       <!-- Search Form -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <form method="POST" action="/" class="flex flex-wrap items-end gap-4">
+        <form method="POST" action="/" id="searchForm" class="flex flex-wrap items-end gap-4">
           <!-- Product Name -->
           <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -619,7 +735,8 @@
               type="text"
               name="version"
               value="{{ version|default('') }}"
-              placeholder="e.g., 2.4.1"
+              placeholder="e.g., 2.4.49"
+              title="Only CVEs whose affected versions include this one are shown"
               class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -634,6 +751,17 @@
             </button>
           </div>
         </form>
+
+        <!-- Live scan progress (filled in by the search handler below) -->
+        <div id="scanProgress" class="mt-4" hidden aria-live="polite">
+          <div class="flex justify-between text-sm mb-1">
+            <span id="scanProgressMsg" class="text-gray-600">Starting...</span>
+            <span id="scanProgressTime" class="text-gray-500"></span>
+          </div>
+          <div class="progress-track"><div id="scanProgressFill" class="progress-fill"></div></div>
+        </div>
+        <div id="scanError" class="notice notice-error mt-4" role="alert" {% if not error %}hidden{% endif %}>{{ error|default('') }}</div>
+
         <p class="text-xs text-gray-500 mt-3">
           {% if api_key_persisted %}
           ✓ Using the NVD API key saved in <a href="#" onclick="switchToSettingsTab(event)" class="text-blue-600 hover:underline">Settings</a>.
@@ -643,6 +771,22 @@
         </p>
       </div>
       {% if results is not none %}
+      {% if warnings %}
+      <div class="notice notice-warn" role="status">
+        <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+      </div>
+      {% endif %}
+      {% if version_summary %}
+      <div class="notice notice-info" role="status">
+        Version <strong>{{ version }}</strong>:
+        <strong>{{ version_summary.affected }}</strong> confirmed affected,
+        <strong>{{ version_summary.unverified }}</strong> unverified (NVD has no version data to check).
+        Hidden: <strong>{{ version_summary.excluded }}</strong> whose affected ranges don't include this version
+        and <strong>{{ version_summary.other_product }}</strong> that NVD lists under a different product
+        (if that looks wrong, try a shorter product name).
+      </div>
+      {% endif %}
+
       <!-- Statistics Dashboard -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="stats-card border-blue-500">
@@ -710,6 +854,16 @@
         <span class="text-sm text-gray-600">
           Showing {{ results|length }} vulnerabilities sorted by risk priority
         </span>
+        {% if version_summary %}
+        <label class="text-sm text-gray-600">
+          Version match:
+          <select id="versionMatchFilter" class="border border-gray-300 rounded-lg px-2 py-1 ml-1">
+            <option value="all">All</option>
+            <option value="Affected">Confirmed affected</option>
+            <option value="Unverified">Unverified</option>
+          </select>
+        </label>
+        {% endif %}
         <div class="flex gap-2">
           <button
             onclick="downloadCSV()"
@@ -767,6 +921,7 @@
           <tbody class="bg-white divide-y divide-gray-200">
             {% for item in results %}
             <tr
+              data-vm="{{ item.Version_Match }}"
               class="hover:bg-gray-50 transition {% if item.KEV_Status == 'Known Exploited' %}kev-row {% elif item.Severity == 'CRITICAL' %}critical-row{% endif %}"
             >
               <!-- CVE ID -->
@@ -789,12 +944,21 @@
                   {% else %}
                   <div class="text-xs text-red-600 mt-1" title="No reference tagged 'Patch' found in NVD's data for this CVE">No patch ref. in NVD</div>
                   {% endif %}
+                  {% if item.CWE %}
+                  <div class="text-xs text-gray-500 mt-1" title="Weakness type (CWE)">{{ item.CWE }}</div>
+                  {% endif %}
+                  {% if item.Version_Match == 'Affected' %}
+                  <div><span class="vm-badge vm-affected" title="NVD's affected version ranges include {{ version }}">✔ Affects {{ version }}</span></div>
+                  {% elif item.Version_Match == 'Unverified' %}
+                  <div><span class="vm-badge vm-unverified" title="NVD has no version data for this product, so {{ version }} could not be checked">? Version unverified</span></div>
+                  {% endif %}
                   <div class="flex gap-2 mt-1">
                     <a href="{{ item.Link }}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">NVD</a>
                     {% if item.EPSS_Score > 0 %}
                     <a href="https://api.first.org/data/v1/epss?cve={{ item.CVE }}" target="_blank" class="text-green-700 hover:text-green-900 underline">EPSS</a>
                     {% endif %}
                   </div>
+                  <button type="button" class="details-btn" data-cve="{{ item.CVE }}">▸ Details</button>
                 </div>
               </td>
 
@@ -837,7 +1001,7 @@
               <td class="px-3 py-3 max-w-xs">
                 <div
                   class="text-sm text-gray-900 truncate"
-                  title="{{ item.Description }}"
+                  title="{{ item.Description[:500] }}"
                 >
                   {{ item.Description[:150] }}{% if item.Description|length >
                   150 %}...{% endif %}
@@ -848,7 +1012,7 @@
               <td class="px-3 py-3 max-w-xs">
                 <div
                   class="text-sm text-gray-600 truncate"
-                  title="{{ item.Affected_Products }}"
+                  title="{{ item.Affected_Products[:400] }}"
                 >
                   {{ item.Affected_Products[:100] }}{% if
                   item.Affected_Products|length > 100 %}...{% endif %}
@@ -955,6 +1119,11 @@
           <p id="depGraphDensityHint" class="text-xs text-gray-500 mt-2" style="display:none">
             Version labels are hidden for readability on large graphs -- hover a node for details.
           </p>
+          {% if results|length > graph_limit %}
+          <p class="text-xs text-gray-500 mt-2">
+            Built from the {{ graph_limit }} highest-risk CVEs of {{ results|length }} to keep the map readable.
+          </p>
+          {% endif %}
         </div>
       </div>
       </div>
@@ -1015,29 +1184,20 @@
     </div>
 
     <script>
-            {% if results %}
-            // Store results for manual export
-            const resultsData = {{ results | tojson }};
-            const productName = "{{ product }}";
-            const analytics = {{ analytics | tojson }};
+            // The finished scan lives server-side; exports and CVE details refer to it by id
+            const jobId = {{ job_id|default('')|tojson }};
 
-
-            // Manual CSV export only (no auto-save)
+            // Manual CSV / Excel export only (no auto-save)
             function downloadCSV() {
-                const params = new URLSearchParams({
-                    product: productName,
-                    data: JSON.stringify(resultsData)
-                });
-                window.open(`/download/csv?${params}`, '_blank');
+                window.open(`/download/csv?job=${encodeURIComponent(jobId)}`, '_blank');
             }
 
             function downloadExcel() {
-                const params = new URLSearchParams({
-                    product: productName,
-                    data: JSON.stringify(resultsData)
-                });
-                window.open(`/download/excel?${params}`, '_blank');
+                window.open(`/download/excel?job=${encodeURIComponent(jobId)}`, '_blank');
             }
+
+            {% if results %}
+            const analytics = {{ analytics | tojson }};
 
 
             // Initialize FIXED Charts
@@ -1509,7 +1669,12 @@
                 // Per-column search
                 table.columns().every(function(idx) {
                     $('input', this.header()).on('keyup change', function() {
-                        table.column(idx).search(this.value).draw();
+                        // Blurring the box fires "change" right after the last keyup already
+                        // applied this search; redrawing again shifts the layout mid-click
+                        // and swallows the click (e.g. on a row's Details button).
+                        if (table.column(idx).search() !== this.value) {
+                            table.column(idx).search(this.value).draw();
+                        }
                     });
                 });
 
@@ -1557,11 +1722,172 @@
                 $('input.dt-search').attr('tabindex', '0');
 
 
-                // Show loading state when form is submitted
-                $('form').on('submit', function() {
-                    $('button[type="submit"]').html('🔍 Searching...').prop('disabled', true);
+                // Version-match filter (only rendered when a version was searched)
+                $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'cve_table') return true;
+                    const mode = $('#versionMatchFilter').val();
+                    if (!mode || mode === 'all') return true;
+                    const tr = settings.aoData[dataIndex].nTr;
+                    return !!tr && tr.dataset.vm === mode;
+                });
+                $('#versionMatchFilter').on('change', function () { table.draw(); });
+
+                // Expandable CVE details -- fetched on demand from the finished scan
+                $('#cve_table tbody').on('click', '.details-btn', function () {
+                    const btn = $(this);
+                    const row = table.row(btn.closest('tr'));
+                    if (row.child.isShown()) {
+                        row.child.hide();
+                        btn.text('▸ Details');
+                        return;
+                    }
+                    btn.text('▾ Details');
+                    row.child('<div class="cve-details-loading">Loading details...</div>').show();
+                    fetch(`/api/job/${encodeURIComponent(jobId)}/cve/${encodeURIComponent(btn.data('cve'))}`)
+                        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+                        .then(d => row.child(renderCveDetails(d)).show())
+                        .catch(err => row.child(
+                            '<div class="cve-details-loading">Could not load details (' + esc(err.message) + ').</div>'
+                        ).show());
+                });
+
+                // Search: run the scan in the background and show live progress
+                $('#searchForm').on('submit', function (e) {
+                    e.preventDefault();
+                    const form = this;
+                    const btn = $(form).find('button[type="submit"]');
+                    const started = Date.now();
+                    const timer = setInterval(() => {
+                        $('#scanProgressTime').text(Math.round((Date.now() - started) / 1000) + 's');
+                    }, 1000);
+
+                    function setProgress(message, fraction) {
+                        $('#scanProgressMsg').text(message);
+                        $('#scanProgressFill').css('width', Math.round(Math.max(0.02, fraction) * 100) + '%');
+                    }
+                    function fail(message) {
+                        clearInterval(timer);
+                        $('#scanProgress').prop('hidden', true);
+                        $('#scanError').text(message).prop('hidden', false);
+                        btn.text('Search').prop('disabled', false);
+                    }
+                    function poll(id) {
+                        fetch(`/api/scan/${encodeURIComponent(id)}`)
+                            .then(r => r.json())
+                            .then(s => {
+                                if (s.status === 'done') {
+                                    clearInterval(timer);
+                                    setProgress('Loading results...', 1);
+                                    window.location.href = '/?job=' + encodeURIComponent(id);
+                                } else if (s.status === 'error') {
+                                    fail(s.error || s.message || 'The search failed.');
+                                } else {
+                                    setProgress(s.message, s.progress);
+                                    setTimeout(() => poll(id), 700);
+                                }
+                            })
+                            .catch(err => fail('Lost contact with the app: ' + err.message));
+                    }
+
+                    btn.html('🔍 Searching...').prop('disabled', true);
+                    $('#scanError').prop('hidden', true);
+                    $('#scanProgress').prop('hidden', false);
+                    setProgress('Starting...', 0.02);
+
+                    fetch('/api/scan', { method: 'POST', body: new URLSearchParams(new FormData(form)) })
+                        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+                        .then(({ ok, d }) => {
+                            if (!ok) throw new Error(d.message || 'Could not start the search.');
+                            poll(d.job_id);
+                        })
+                        .catch(err => fail(err.message));
                 });
             });
+
+            // HTML-escape text from NVD before putting it in the details panel
+            function esc(value) {
+                return String(value ?? '').replace(/[&<>"']/g, c => (
+                    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            }
+            function safeUrl(url) {
+                return /^https?:\/\//i.test(url) ? url : '#';
+            }
+
+            function renderCveDetails(d) {
+                const cvss = d.cvss || {};
+                const cards = [];
+
+                // Weakness
+                const cwes = (d.cwes || []).map(c => {
+                    const m = /^CWE-(\d+)$/.exec(c.id);
+                    const id = m
+                        ? `<a href="https://cwe.mitre.org/data/definitions/${m[1]}.html" target="_blank" rel="noopener">${esc(c.id)}</a>`
+                        : esc(c.id);
+                    return `<p>${id}${c.name ? ' &mdash; ' + esc(c.name) : ''}</p>`;
+                }).join('');
+                cards.push(`<div class="cve-card"><h4>Weakness</h4>${cwes || '<p class="cve-muted">No CWE assigned</p>'}</div>`);
+
+                // CVSS breakdown
+                let cvssBody = '<p class="cve-muted">No CVSS data</p>';
+                if (cvss.vector) {
+                    const chips = (cvss.breakdown || []).map(b =>
+                        `<span class="cve-chip">${esc(b.label)}: <strong>${esc(b.value)}</strong></span>`).join('');
+                    const subs = [];
+                    if (cvss.exploitability != null) subs.push(`Exploitability ${esc(cvss.exploitability)}`);
+                    if (cvss.impact != null) subs.push(`Impact ${esc(cvss.impact)}`);
+                    cvssBody = `<p><code>${esc(cvss.vector)}</code></p>` +
+                        `<p class="cve-muted">CVSS ${esc(cvss.version)}${cvss.source ? ' &middot; ' + esc(cvss.source) : ''}` +
+                        `${subs.length ? ' &middot; ' + subs.join(' &middot; ') : ''}</p>` +
+                        `<div class="cve-chips">${chips}</div>`;
+                }
+                cards.push(`<div class="cve-card"><h4>CVSS vector</h4>${cvssBody}</div>`);
+
+                // CISA KEV
+                if (d.kev) {
+                    const ransomware = d.kev.ransomware === 'Known';
+                    cards.push(`<div class="cve-card"><h4>CISA known exploited</h4>` +
+                        (d.kev.name ? `<p><strong>${esc(d.kev.name)}</strong></p>` : '') +
+                        `<p>Added to catalog: <strong>${esc(d.kev.date_added || 'n/a')}</strong></p>` +
+                        `<p>Remediation due: <strong>${esc(d.kev.due_date || 'n/a')}</strong></p>` +
+                        `<p>Ransomware campaigns: <span class="cve-chip${ransomware ? ' cve-chip-danger' : ''}">${esc(d.kev.ransomware || 'Unknown')}</span></p>` +
+                        (d.kev.required_action ? `<p class="cve-muted">${esc(d.kev.required_action)}</p>` : '') +
+                        `</div>`);
+                }
+
+                // Version match
+                if (d.version_match) {
+                    const labels = { 'Affected': 'Confirmed affected', 'Unverified': 'Unverified' };
+                    cards.push(`<div class="cve-card"><h4>Version match</h4>` +
+                        `<p><strong>${esc(labels[d.version_match.status] || d.version_match.status)}</strong></p>` +
+                        (d.version_match.detail ? `<p class="cve-muted">${esc(d.version_match.detail)}</p>` : '') +
+                        `</div>`);
+                }
+
+                // Record info
+                const day = s => esc((s || '').slice(0, 10) || 'n/a');
+                cards.push(`<div class="cve-card"><h4>NVD record</h4>` +
+                    `<p>Published: <strong>${day(d.published)}</strong></p>` +
+                    `<p>Last modified: <strong>${day(d.last_modified)}</strong></p>` +
+                    `<p>Status: <strong>${esc(d.nvd_status || 'n/a')}</strong></p>` +
+                    `<p>Affected configurations: <strong>${esc(d.affected_count)}</strong></p></div>`);
+
+                // References grouped by tag
+                const groups = (d.references || []).map((g, i) => {
+                    const links = g.links.map(l =>
+                        `<li><a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.url)}</a>` +
+                        `${l.tags.length ? ' <span class="cve-muted">(' + esc(l.tags.join(', ')) + ')</span>' : ''}</li>`).join('');
+                    // Open the most actionable groups by default
+                    const open = (g.tag === 'Patch' || g.tag === 'Exploit' || g.tag === 'Vendor Advisory') ? ' open' : '';
+                    return `<details class="cve-ref-group"${open}><summary>${esc(g.tag)} (${g.links.length})</summary>` +
+                        `<ul class="cve-ref-list">${links}</ul></details>`;
+                }).join('');
+
+                return `<div class="cve-details">` +
+                    `<p class="cve-desc">${esc(d.description)}</p>` +
+                    `<div class="cve-details-grid">${cards.join('')}</div>` +
+                    `<div class="cve-refs"><h4 class="cve-muted" style="font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:.4rem">References</h4>` +
+                    `${groups || '<p class="cve-muted">No references</p>'}</div></div>`;
+            }
 
       // Toggle API key visibility
       function toggleApiKeyVisibility() {
