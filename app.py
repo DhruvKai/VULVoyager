@@ -329,16 +329,21 @@ def new_job(product, version):
     job = {
         "id": secrets.token_urlsafe(9),
         "status": "running",        # running | done | error
+        "stage": "nvd",             # nvd | kev | epss | analytics | done
         "message": "Starting...",
         "progress": 0.0,
         "product": product,
         "version": version,
-        "results": None,
+        # CVEs in arrival order. Append-only (never re-sorted) so the page can fetch
+        # "everything after row N" while the scan is still running.
+        "rows": [],
+        "enrich_version": 0,        # bumped whenever KEV / EPSS data lands on `rows`
+        "results": None,            # risk-sorted copy of `rows`, set when the scan finishes
         "analytics": None,
         "warnings": [],
         "version_summary": None,
         "error": None,
-        "index": {},
+        "index": {},                # cve id -> row, filled as rows arrive (detail lookups)
     }
     with JOBS_LOCK:
         JOBS[job["id"]] = job
@@ -353,36 +358,54 @@ def get_job(job_id):
 
 
 def run_scan(job, api_key):
-    """Execute a scan for `job`, updating its progress as it goes."""
+    """Execute a scan for `job`, publishing results as each stage produces them:
+    CVE rows appear as every NVD page arrives, then KEV and EPSS data are layered on,
+    then the analytics are built. The page polls and renders whatever is ready."""
     def progress(message, fraction):
         job["message"] = message
         job["progress"] = fraction
 
     scanner = EnhancedCVEScanner(api_key=api_key, progress=progress)
-    try:
-        product, version = job["product"], job["version"]
+    job["warnings"] = scanner.warnings  # live list: warnings show up as they are raised
+    product, version = job["product"], job["version"]
+    version_counts = Counter()
 
-        raw = scanner.search_nvd(product)
-
-        progress("Analyzing NVD data...", 0.6)
-        unified = [scanner.unify_nvd(item, product, version) for item in raw]
-
+    def publish_nvd_batch(batch):
+        unified = [scanner.unify_nvd(item, product, version) for item in batch]
         if version:
-            counts = Counter(u["Version_Match"] for u in unified)
+            version_counts.update(u["Version_Match"] for u in unified)
             job["version_summary"] = {
-                "affected": counts["Affected"],
-                "unverified": counts["Unverified"],
-                "excluded": counts["Not Affected"],
-                "other_product": counts["Other Product"],
+                "affected": version_counts["Affected"],
+                "unverified": version_counts["Unverified"],
+                "excluded": version_counts["Not Affected"],
+                "other_product": version_counts["Other Product"],
             }
             # Drop CVEs whose ranges rule this version out, and keyword hits that are
             # really about a different product
             unified = [u for u in unified if u["Version_Match"] in ("Affected", "Unverified")]
+        for u in unified:
+            job["index"][u["CVE"]] = u
+        job["rows"].extend(unified)  # after the rows are fully built: pollers read len(rows)
 
-        results = scanner.enhance_cve_data(unified)
+    def enrichment_landed():
+        job["enrich_version"] += 1
 
+    try:
+        scanner.search_nvd(product, on_batch=publish_nvd_batch)
+        rows = job["rows"]
+
+        job["stage"] = "kev"
+        scanner.apply_kev(rows)
+        enrichment_landed()
+
+        job["stage"] = "epss"
+        scanner.apply_epss(rows, on_progress=enrichment_landed)
+
+        job["stage"] = "analytics"
+        progress("Building charts...", 0.95)
         # Sort by multiple criteria (KEV first, then EPSS, then year)
-        results.sort(
+        results = sorted(
+            rows,
             key=lambda x: (
                 x['KEV_Status'] == 'Known Exploited',
                 x['EPSS_Score'],
@@ -390,16 +413,11 @@ def run_scan(job, api_key):
             ),
             reverse=True
         )
-
-        progress("Building charts...", 0.95)
-        analytics = scanner.generate_analytics_data(results)
-
+        job["analytics"] = scanner.generate_analytics_data(results)
         job["results"] = results
-        job["analytics"] = analytics
-        job["index"] = {r["CVE"]: r for r in results}
-        job["warnings"] = scanner.warnings
         job["progress"] = 1.0
         job["message"] = "Done"
+        job["stage"] = "done"
         job["status"] = "done"  # last: pollers treat "done" as "everything above is set"
     except ScanError as e:
         job["error"] = str(e)
@@ -410,76 +428,52 @@ def run_scan(job, api_key):
         job["status"] = "error"
 
 
-def compact_table_html(html):
-    """Collapse the template's indentation inside the CVE table body. With thousands
-    of rows that whitespace is ~45% of the page; HTML renders it identically without.
-    Scoped to <tbody> so inline <script> code (where newlines matter) is untouched."""
-    start = html.find('<tbody class="bg-white divide-y divide-gray-200">')
-    end = html.find('</tbody>', start)
-    if start < 0 or end < 0:
-        return html
-    return html[:start] + re.sub(r'\s+', ' ', html[start:end]) + html[end:]
+ROWS_PAGE_SIZE = 2000       # rows returned per /api/job/<id>/rows request
+ROW_DESC_CHARS = 500        # description text sent to the table (hover text + column search)
+ROW_AFFECTED_CHARS = 400
 
 
-def render_scan(job, api_key):
-    """Render the page for a finished (or failed) job."""
-    persisted = bool(get_persisted_api_key())
-    if job["status"] == "error":
-        return render_template(
-            "index.html", results=None, error=job["error"],
-            product=job["product"], version=job["version"] or "",
-            api_key=api_key or "", api_key_persisted=persisted)
-    return compact_table_html(render_template(
+def slim_row(item):
+    """The fields the CVE table needs -- the full record stays server-side and is
+    fetched on demand by the row expander (/api/job/<id>/cve/<cve>)."""
+    detailed = item.get("Affected_Products_Detailed") or []
+    return {
+        "cve": item["CVE"],
+        "severity": item["Severity"],
+        "score": item["Score"],
+        "epss": item["EPSS_Score"],
+        "epss_pct": item["EPSS_Percentile"],
+        "kev": item["KEV_Status"] == "Known Exploited",
+        "patch": bool(item["Patch_Reference_Found"]),
+        "cwe": item["CWE"],
+        "vm": item["Version_Match"],
+        "desc": (item["Description"] or "")[:ROW_DESC_CHARS],
+        "affected": item["Affected_Products"][:ROW_AFFECTED_CHARS],
+        "versions": ", ".join(f"{d['vendor']} {d['version']}" for d in detailed[:3]),
+        "more_versions": len(detailed) > 3,
+    }
+
+
+@app.route("/")
+def index():
+    # API key comes from the Settings tab, not the search form -- prefer
+    # the current session, falling back to whatever's persisted on disk.
+    api_key = session.get('api_key') or get_persisted_api_key() or ""
+    # The page is a shell; results are loaded by its JS. ?job=<id> re-attaches to a
+    # scan (running or finished) after a reload.
+    return render_template(
         "index.html",
-        results=job["results"],
-        analytics=job["analytics"],
-        product=job["product"],
-        version=job["version"] or "",
-        job_id=job["id"],
-        warnings=job["warnings"],
-        version_summary=job["version_summary"],
+        job_id=request.args.get("job", ""),
         graph_limit=GRAPH_CVE_LIMIT,
-        api_key=api_key or "",
-        api_key_persisted=persisted
-    ))
+        api_key=api_key,
+        api_key_persisted=bool(get_persisted_api_key())
+    )
 
 
 def parse_search_form(source):
     product = (source.get("product_name") or "").strip()
     version = (source.get("version") or "").strip() or None
     return product, version
-
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    # API key comes from the Settings tab, not the search form -- prefer
-    # the current session, falling back to whatever's persisted on disk.
-    api_key = session.get('api_key') or get_persisted_api_key() or None
-
-    if request.method == "POST":
-        # Plain form post: the page's JS normally uses /api/scan for live progress,
-        # this is the no-JS fallback and runs the scan inline.
-        product, version = parse_search_form(request.form)
-        job = new_job(product, version)
-        run_scan(job, api_key)
-        return render_scan(job, api_key)
-
-    job_id = request.args.get("job")
-    if job_id:
-        job = get_job(job_id)
-        if job and job["status"] in ("done", "error"):
-            return render_scan(job, api_key)
-        return render_template(
-            "index.html", results=None, api_key=api_key,
-            api_key_persisted=bool(get_persisted_api_key()),
-            error="Those results are no longer available. Run the search again.")
-
-    return render_template(
-        "index.html",
-        results=None,
-        api_key=api_key,
-        api_key_persisted=bool(get_persisted_api_key())
-    )
 
 
 @app.route('/api/scan', methods=['POST'])
@@ -502,15 +496,61 @@ def scan_status(job_id):
         return jsonify({'status': 'error', 'message': 'Unknown scan'}), 404
     return jsonify({
         'status': job["status"],
+        'stage': job["stage"],
         'message': job["message"],
         'progress': job["progress"],
         'error': job["error"],
+        'product': job["product"],
+        'version': job["version"] or "",
+        'rows': len(job["rows"]),                # how many CVEs are ready to fetch
+        'enrich_version': job["enrich_version"],  # changes when new KEV/EPSS data is available
+        'version_summary': job["version_summary"],
+        'warnings': list(job["warnings"]),
     })
+
+
+@app.route('/api/job/<job_id>/rows')
+def job_rows(job_id):
+    """CVE rows from `offset` on, in arrival order (up to ROWS_PAGE_SIZE per call)."""
+    job = get_job(job_id)
+    if not job:
+        return jsonify({'status': 'error', 'message': 'Unknown scan'}), 404
+    offset = max(0, request.args.get("offset", 0, type=int))
+    chunk = job["rows"][offset:offset + ROWS_PAGE_SIZE]
+    return jsonify({'rows': [slim_row(r) for r in chunk], 'next': offset + len(chunk)})
+
+
+@app.route('/api/job/<job_id>/enrichment')
+def job_enrichment(job_id):
+    """EPSS scores and KEV membership gathered so far, keyed by CVE id. Small on
+    purpose: the page merges it into rows it already has instead of refetching them."""
+    job = get_job(job_id)
+    if not job:
+        return jsonify({'status': 'error', 'message': 'Unknown scan'}), 404
+    version = job["enrich_version"]  # read first: the data below is at least this fresh
+    epss, kev = {}, []
+    for r in list(job["rows"]):
+        if r["EPSS_Score"] or r["EPSS_Percentile"]:
+            epss[r["CVE"]] = [r["EPSS_Score"], r["EPSS_Percentile"]]
+        if r["KEV_Status"] == "Known Exploited":
+            kev.append(r["CVE"])
+    return jsonify({'epss': epss, 'kev': kev, 'version': version})
+
+
+@app.route('/api/job/<job_id>/analytics')
+def job_analytics(job_id):
+    """Chart data for a finished scan (built once EPSS/KEV are in)."""
+    job = get_job(job_id)
+    if not job:
+        return jsonify({'status': 'error', 'message': 'Unknown scan'}), 404
+    if job["status"] != "done":
+        return jsonify({'status': 'error', 'message': 'The scan has not finished yet'}), 409
+    return jsonify(job["analytics"])
 
 
 @app.route('/api/job/<job_id>/cve/<cve_id>')
 def cve_details(job_id, cve_id):
-    """Full detail for one CVE in a finished scan (loaded on demand by the row expander)."""
+    """Full detail for one CVE (loaded on demand by the row expander)."""
     job = get_job(job_id)
     item = job["index"].get(cve_id) if job else None
     if item is None:
@@ -588,8 +628,10 @@ class EnhancedCVEScanner:
                 time.sleep(2 * attempt)
         raise ScanError(f"Could not reach NVD after 3 attempts: {last_error}")
 
-    def search_nvd(self, product):
+    def search_nvd(self, product, on_batch=None):
         """Keyword search across every page of NVD results (up to MAX_CVES).
+        `on_batch(items)` is called with each page as it arrives, so callers can
+        show results before the last page is fetched.
         The version is deliberately not part of the query: NVD often describes
         affected versions as ranges ('before 2.4.51'), which a text search on the
         exact version would miss -- run_scan filters by version afterwards."""
@@ -600,11 +642,13 @@ class EnhancedCVEScanner:
         while True:
             data = self._nvd_request(params)
             total = data.get("totalResults", 0)
-            batch = data.get("vulnerabilities", [])
+            batch = data.get("vulnerabilities", [])[:MAX_CVES - len(collected)]
             collected.extend(batch)
+            if on_batch and batch:
+                on_batch(batch)
 
             target = max(1, min(total, MAX_CVES))
-            self._last_fraction = 0.05 + 0.5 * min(1.0, len(collected) / target)
+            self._last_fraction = 0.05 + 0.45 * min(1.0, len(collected) / target)
             self._progress(f"Fetched {min(len(collected), target):,} of {target:,} CVEs from NVD...",
                            self._last_fraction)
 
@@ -617,24 +661,29 @@ class EnhancedCVEScanner:
             self.warnings.append(
                 f"NVD has {total:,} CVEs matching \"{product}\" -- only the first {MAX_CVES:,} were "
                 "loaded. Use a more specific product name to narrow the search.")
-        return collected[:MAX_CVES]
+        return collected
 
     # -- EPSS --------------------------------------------------------------
-    def get_epss_scores(self, cve_list):
-        """EPSS scores for every CVE id, fetched in batches."""
+    def get_epss_scores(self, cve_list, on_batch=None):
+        """EPSS scores for every CVE id, fetched in batches. `on_batch(scores)` is
+        called with each batch's scores as they arrive."""
         epss_data = {}
         batches = [cve_list[i:i + EPSS_BATCH_SIZE] for i in range(0, len(cve_list), EPSS_BATCH_SIZE)]
         failed = 0
         for n, batch in enumerate(batches, 1):
-            self._progress(f"Getting EPSS scores ({n}/{len(batches)})...", 0.6 + 0.3 * n / len(batches))
+            self._progress(f"Getting EPSS scores ({n}/{len(batches)})...", 0.55 + 0.37 * n / len(batches))
             try:
                 response = self.session.get(f"{self.epss_url}?cve={','.join(batch)}", timeout=30)
                 response.raise_for_status()
+                batch_scores = {}
                 for item in response.json().get('data', []):
-                    epss_data[item.get('cve')] = {
+                    batch_scores[item.get('cve')] = {
                         'epss_score': float(item.get('epss', 0)),
                         'epss_percentile': float(item.get('percentile', 0))
                     }
+                epss_data.update(batch_scores)
+                if on_batch:
+                    on_batch(batch_scores)
             except (requests.RequestException, ValueError) as e:
                 print(f"[EPSS] Error: {e}")
                 failed += 1
@@ -677,7 +726,7 @@ class EnhancedCVEScanner:
             print(f"[KEV] Using cached catalog ({len(cached['entries'])} entries)")
             return cached["entries"]
 
-        self._progress("Downloading CISA KEV catalog...", 0.9)
+        self._progress("Downloading CISA KEV catalog...", 0.5)
         try:
             response = self.session.get(self.kev_url, timeout=30)
             response.raise_for_status()
@@ -895,25 +944,13 @@ class EnhancedCVEScanner:
 
         return G
 
-    def enhance_cve_data(self, unified_results):
-        """Add EPSS and KEV data to CVE results"""
-        cve_ids = [item['CVE'] for item in unified_results if item['CVE']]
-
-        # Get enrichment data
-        epss_data = self.get_epss_scores(cve_ids)
+    def apply_kev(self, rows):
+        """Mark CVEs that are in CISA's KEV catalog (which also carries the ransomware
+        flag). Cheap -- the catalog is cached on disk -- so it runs before EPSS."""
+        self._progress("Checking the CISA KEV catalog...", 0.5)
         kev_data = self.get_kev_data()
-
-        # Enhance each CVE
-        for item in unified_results:
-            cve_id = item['CVE']
-
-            # Add EPSS score
-            if cve_id in epss_data:
-                item['EPSS_Score'] = epss_data[cve_id]['epss_score']
-                item['EPSS_Percentile'] = epss_data[cve_id]['epss_percentile']
-
-            # Add KEV status (the catalog also carries the ransomware flag)
-            kev = kev_data.get(cve_id)
+        for item in rows:
+            kev = kev_data.get(item['CVE'])
             if kev:
                 item['KEV_Status'] = 'Known Exploited'
                 item['KEV_Date_Added'] = kev['date_added']
@@ -921,7 +958,21 @@ class EnhancedCVEScanner:
                 item['KEV_Ransomware'] = kev['ransomware']
                 item['Details']['kev'] = dict(kev)
 
-        return unified_results
+    def apply_epss(self, rows, on_progress=None):
+        """Fill in EPSS scores batch by batch; `on_progress()` fires after each batch
+        has been applied to `rows`."""
+        by_cve = {item['CVE']: item for item in rows if item['CVE']}
+
+        def apply_batch(scores):
+            for cve_id, score in scores.items():
+                item = by_cve.get(cve_id)
+                if item:
+                    item['EPSS_Score'] = score['epss_score']
+                    item['EPSS_Percentile'] = score['epss_percentile']
+            if on_progress:
+                on_progress()
+
+        self.get_epss_scores(list(by_cve), on_batch=apply_batch)
 
     def generate_analytics_data(self, results):
         """Generate enhanced analytics data for charts"""
@@ -945,8 +996,15 @@ class EnhancedCVEScanner:
             # Dependency graph data
             'dependency_graph': {}
         }
+        cwe_counts = Counter()
+        attack_vectors = Counter()
 
         for item in results:
+            # Weakness types (CWE) and how remotely reachable the CVE is (CVSS attack vector)
+            cwe_counts.update(c.strip() for c in (item.get('CWE') or '').split(',') if c.strip())
+            av = re.search(r'(?:^|/)AV:([NALP])(?:/|$)', item.get('CVSS_Vector') or '')
+            attack_vectors[_AV_3[av.group(1)] if av else 'Unknown'] += 1
+
             # Risk distribution
             if item['KEV_Status'] == 'Known Exploited':
                 analytics['risk_distribution']['kev_count'] += 1
@@ -1002,6 +1060,39 @@ class EnhancedCVEScanner:
         # Convert defaultdicts to regular dicts for JSON serialization
         analytics['vendor_version_matrix'] = {k: dict(v) for k, v in analytics['vendor_version_matrix'].items()}
         analytics['patch_by_vendor'] = {k: dict(v) for k, v in analytics['patch_by_vendor'].items()}
+
+        analytics['cwe_distribution'] = [
+            {'id': cwe, 'name': CWE_NAMES.get(cwe, ''), 'count': count}
+            for cwe, count in cwe_counts.most_common(8)
+        ]
+        analytics['attack_vector'] = [
+            {'label': label, 'count': attack_vectors[label]}
+            for label in (*_AV_3.values(), 'Unknown') if attack_vectors[label]
+        ]
+
+        # Known-exploited spotlight: how many, how many tied to ransomware, what's newest
+        kev_items = [i for i in results if i['KEV_Status'] == 'Known Exploited']
+        newest_kev = sorted((i for i in kev_items if i.get('KEV_Date_Added')),
+                            key=lambda i: i['KEV_Date_Added'], reverse=True)[:3]
+        analytics['kev_summary'] = {
+            'total': len(kev_items),
+            'ransomware': sum(1 for i in kev_items if i.get('KEV_Ransomware') == 'Known'),
+            'recent': [{'cve': i['CVE'],
+                        'date_added': i['KEV_Date_Added'],
+                        'name': (i['Details'].get('kev') or {}).get('name', '')} for i in newest_kev],
+        }
+
+        # "Fix these first": known-exploited, then most likely to be exploited, then worst CVSS
+        def priority(i):
+            score = i['Score'] if isinstance(i['Score'], (int, float)) else 0
+            return (i['KEV_Status'] == 'Known Exploited', i['EPSS_Score'], score)
+
+        analytics['top_priority'] = [
+            {'cve': i['CVE'], 'severity': i['Severity'], 'score': i['Score'],
+             'epss': i['EPSS_Score'], 'epss_pct': i['EPSS_Percentile'],
+             'kev': i['KEV_Status'] == 'Known Exploited', 'patch': bool(i['Patch_Reference_Found'])}
+            for i in sorted(results, key=priority, reverse=True)[:10]
+        ]
 
         return analytics
 

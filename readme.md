@@ -6,8 +6,9 @@ with EPSS and CISA KEV data, and shows the results with charts and CSV/Excel exp
 ## Searching
 
 - **Product** is matched against NVD by keyword; every page of results is loaded (up to
-  5,000 CVEs -- narrow the name if a warning says the cap was hit). A progress bar shows the
-  scan while it runs.
+  5,000 CVEs -- narrow the name if a warning says the cap was hit). Results appear as they
+  load: CVEs show up as each NVD page arrives, then KEV status and EPSS scores fill in while a
+  progress bar tracks the scan, and the charts and exports become available when it finishes.
 - **Version (optional)** checks the version against NVD's affected-version ranges instead of
   just searching for the text, so `apache http server` + `2.4.49` only shows CVEs whose ranges
   include 2.4.49. Each CVE is tagged **Affects <version>** or **Version unverified** (NVD has
@@ -17,6 +18,12 @@ with EPSS and CISA KEV data, and shows the results with charts and CSV/Excel exp
 - **Details** under each CVE expands its CWE weakness type, CVSS vector breakdown, CISA KEV
   dates and ransomware flag, and reference links grouped by tag (Patch, Exploit, Vendor
   Advisory, ...).
+- **CVE list**: type in the box under any column header to filter by that column. **Full page**
+  (top-left of the table) expands the list edge to edge; press Esc to leave it.
+- **Analytics** tab: a "Fix these first" top-10 (KEV first, then EPSS, then CVSS), risk
+  distribution, severity breakdown, EPSS vs CVSS, attack vector, trends by year, top vendors,
+  most vulnerable versions, top weakness types (CWE), patch-reference coverage and a CISA KEV
+  spotlight.
 - The CISA KEV catalog is cached in a `cache/` folder next to the app for 24 hours (and used
   as a fallback if CISA is unreachable). Delete the folder to force a refresh.
 

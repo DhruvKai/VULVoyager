@@ -134,7 +134,12 @@
         font-weight: 600;
       }
       .badge-na {
-        @apply bg-gray-500 text-white px-2 py-1 rounded-full text-xs font-semibold;
+        background: #6b7280;
+        color: #fff;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
       }
 
       .epss-high {
@@ -150,26 +155,32 @@
         font-weight: 700;
       }
 
-      .stats-card {
-        @apply bg-white p-5 rounded-xl shadow-sm border border-l-4;
+      /* KEV / critical rows: a thin accent on the row's first cell. (Cell backgrounds are
+         forced by the dark-mode rules below, so a row background would never show.) */
+      #cve_table tr.kev-row > td:first-child {
+        box-shadow: inset 3px 0 0 var(--st-critical);
       }
-      .kev-row {
-        @apply bg-red-50 border-l-4 border-red-500;
-      }
-      .critical-row {
-        @apply bg-orange-50 border-l-4 border-orange-500;
+      #cve_table tr.critical-row > td:first-child {
+        box-shadow: inset 3px 0 0 var(--st-serious);
       }
 
-      /* Chart containers -- normal flex sizing, no absolute-position clipping */
+      /* Chart containers -- normal flex sizing, no absolute-position clipping.
+         (Plain CSS: Tailwind's CDN only expands @apply in <style type="text/tailwindcss">.) */
       .chart-container {
-        @apply bg-white p-5 rounded-xl shadow-sm border;
+        background: var(--chart-bg-dm);
+        border: 1px solid var(--border-dm);
+        border-radius: 0.75rem;
+        padding: 1.25rem;
         display: flex;
         flex-direction: column;
         min-height: 340px;
         width: 100%;
       }
       .chart-container h3 {
-        @apply text-sm font-semibold mb-2 text-gray-700;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-primary-dm);
         flex: 0 0 auto;
       }
       .chart-canvas-wrap {
@@ -411,6 +422,35 @@
         --chart-bg-dm: #ffffff;
         --mark-bg-dm: yellow;
         --mark-text-dm: black;
+
+        /* Fixed status palette (same hexes as the badges and charts) */
+        --st-critical: #d03b3b;
+        --st-serious: #ec835a;
+        --st-warning: #fab219;
+        --st-good: #0ca30c;
+        --accent-blue: #2a78d6;
+        --accent-blue-rgb: 42, 120, 214;
+        --st-critical-rgb: 208, 59, 59;
+        --st-serious-rgb: 236, 131, 90;
+        --node-product: #2a78d6;
+        --node-version: #008300;
+        --good-ink: #006300;
+        --skel-a: rgba(120, 120, 120, 0.14);
+        --skel-b: rgba(120, 120, 120, 0.28);
+      }
+
+      /* Unclassed text must follow the theme too (it was inheriting the browser's black) */
+      body {
+        color: var(--text-primary-dm);
+      }
+
+      [data-theme="dark"] {
+        --accent-blue: #3987e5;
+        --accent-blue-rgb: 57, 135, 229;
+        --node-product: #3987e5;
+        --good-ink: #0ca30c;
+        --skel-a: rgba(255, 255, 255, 0.07);
+        --skel-b: rgba(255, 255, 255, 0.14);
       }
 
       [data-theme="dark"] {
@@ -669,6 +709,407 @@
         color: var(--text-secondary-dm) !important;
       }
 
+      /* === Loading skeletons === */
+      @keyframes shimmer {
+        from { background-position: 200% 0; }
+        to { background-position: -200% 0; }
+      }
+      .skeleton {
+        background: linear-gradient(90deg, var(--skel-a) 25%, var(--skel-b) 50%, var(--skel-a) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.6s linear infinite;
+        border-radius: 6px;
+      }
+      .pending-note {
+        border: 1px dashed var(--border-dm);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        color: var(--text-secondary-dm);
+        font-size: 0.875rem;
+        text-align: center;
+      }
+      .skeleton-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .skeleton-card {
+        height: 220px;
+        border-radius: 0.75rem;
+      }
+      .empty-note {
+        margin: auto;
+        color: var(--text-secondary-dm);
+        font-size: 0.875rem;
+      }
+
+      /* === Stat tiles === */
+      .stat-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      @media (min-width: 640px) {
+        .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (min-width: 1024px) {
+        .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      }
+      .stat-tile {
+        --accent: var(--accent-blue);
+        --accent-rgb: var(--accent-blue-rgb);
+        background: var(--bg-secondary-dm);
+        border: 1px solid var(--border-dm);
+        border-radius: 0.75rem;
+        padding: 1rem 1.125rem 1.125rem;
+        display: flex;
+        flex-direction: column;
+        transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .stat-tile[data-tone="critical"] { --accent: var(--st-critical); --accent-rgb: var(--st-critical-rgb); }
+      .stat-tile[data-tone="serious"] { --accent: var(--st-serious); --accent-rgb: var(--st-serious-rgb); }
+      .stat-tile:hover {
+        border-color: rgba(var(--accent-rgb), 0.55);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+      }
+      .stat-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+      .stat-label {
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--text-secondary-dm);
+      }
+      .stat-icon {
+        width: 2.25rem;
+        height: 2.25rem;
+        flex: 0 0 auto;
+        border-radius: 0.625rem;
+        display: grid;
+        place-items: center;
+        color: var(--accent);
+        background: rgba(var(--accent-rgb), 0.14);
+      }
+      .stat-icon svg {
+        width: 1.2rem;
+        height: 1.2rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .stat-value {
+        position: relative;
+        margin-top: 0.35rem;
+        font-size: 2rem;
+        line-height: 1.15;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--text-primary-dm);
+      }
+      .stat-meter {
+        height: 4px;
+        margin-top: 0.6rem;
+        border-radius: 9999px;
+        background: rgba(var(--accent-rgb), 0.16);
+        overflow: hidden;
+      }
+      .stat-meter > span {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: inherit;
+        background: var(--accent);
+        transition: width 0.5s ease;
+      }
+      .stat-caption {
+        min-height: 1rem;
+        margin-top: 0.4rem;
+        font-size: 0.75rem;
+        color: var(--text-secondary-dm);
+      }
+      /* Until its data arrives a tile shows a shimmer in place of the number */
+      .stat-tile.is-loading .stat-value { color: transparent; }
+      .stat-tile.is-loading .stat-value::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.2em;
+        height: 0.75em;
+        width: 4.5rem;
+        border-radius: 6px;
+        background: linear-gradient(90deg, var(--skel-a) 25%, var(--skel-b) 50%, var(--skel-a) 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.6s linear infinite;
+      }
+      .stat-tile.is-loading .stat-meter > span { width: 0 !important; }
+
+      /* === Buttons used in the table toolbar === */
+      .tool-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.25;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border-dm);
+        background: var(--bg-secondary-dm);
+        color: var(--text-primary-dm);
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+      }
+      .tool-btn:hover:not(:disabled) { border-color: var(--accent-blue); }
+      .tool-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+      .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .tool-btn svg {
+        width: 1rem;
+        height: 1rem;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .tool-btn-primary {
+        background: var(--accent-blue);
+        border-color: var(--accent-blue);
+        color: #fff;
+      }
+      .tool-btn-primary:hover:not(:disabled) { filter: brightness(1.1); border-color: var(--accent-blue); }
+
+      /* === CVE table card: toolbar, footer, full-page mode === */
+      .table-card {
+        background: var(--bg-secondary-dm);
+        border: 1px solid var(--border-dm);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+      }
+      .table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.625rem 0.875rem;
+        border-bottom: 1px solid var(--border-dm);
+      }
+      .table-toolbar .dataTables_length {
+        float: none;
+        margin: 0;
+        padding: 0;
+      }
+      .table-toolbar .dataTables_length label,
+      .toolbar-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8125rem;
+        color: var(--text-secondary-dm);
+      }
+      .table-toolbar select {
+        padding: 0.25rem 0.4rem;
+        border: 1px solid var(--border-dm);
+        border-radius: 0.375rem;
+        font-size: 0.8125rem;
+      }
+      .toolbar-extras {
+        margin-left: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .table-footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        border-top: 1px solid var(--border-dm);
+      }
+      .table-footer .dataTables_info,
+      .table-footer .dataTables_paginate {
+        float: none;
+        margin: 0;
+        padding: 0;
+        font-size: 0.8125rem;
+      }
+      .table-card.is-fullscreen {
+        position: fixed;
+        inset: 0;
+        z-index: 1100;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .table-card.is-fullscreen .dataTables_wrapper,
+      .table-card.is-fullscreen .dataTables_scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .table-card.is-fullscreen .dataTables_scrollHead { flex: 0 0 auto; }
+      .table-card.is-fullscreen .dataTables_scrollBody {
+        flex: 1 1 0;
+        min-height: 0;
+        height: auto !important;
+        max-height: none !important;
+        overflow: auto !important;
+      }
+
+      /* Header cells: label + filter box. Explicit widths keep the boxes readable and
+         the description column narrow; Affected Products takes whatever is left. */
+      #cve_table { width: 100%; }
+      #cve_table thead th {
+        padding: 10px 24px 10px 12px;
+        font-size: 0.8125rem;
+        white-space: nowrap;
+        text-align: left;
+      }
+      #cve_table thead th.text-center { text-align: center; }
+      #cve_table tbody td { padding: 10px 12px; }
+      /* DataTables forces content-box on cells, so these are content widths: the header
+         cells add 36px of padding, giving roughly 190 / 130 / 100 / 120 / 200px overall. */
+      #cve_table .col-cve { width: 154px; min-width: 154px; }
+      #cve_table .col-risk { width: 94px; min-width: 94px; }
+      #cve_table .col-cvss { width: 64px; min-width: 64px; }
+      #cve_table .col-epss { width: 84px; min-width: 84px; }
+      #cve_table .col-desc { width: 164px; min-width: 164px; }
+      #cve_table th.col-aff { width: 100%; min-width: 260px; }
+      #cve_table td.col-aff { width: 100%; max-width: 0; }
+      input.dt-search { margin-top: 0.35rem; font-size: 0.8125rem; min-width: 0; }
+      .cell-clamp {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .cell-desc { max-width: 176px; }
+
+      /* Cell contents */
+      .cve-id { font-weight: 600; white-space: nowrap; }
+      .cve-meta { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.3rem; }
+      .meta-chip {
+        font-size: 0.6875rem;
+        line-height: 1.1;
+        padding: 0.15rem 0.4rem;
+        border: 1px solid var(--border-dm);
+        border-radius: 0.375rem;
+        color: var(--text-secondary-dm);
+        white-space: nowrap;
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .meta-chip.meta-good { color: var(--good-ink); border-color: rgba(12, 163, 12, 0.45); }
+      .epss-link {
+        display: inline-block;
+        margin-top: 0.15rem;
+        font-size: 0.6875rem;
+        color: var(--accent-blue);
+        text-decoration: none;
+      }
+      .epss-link:hover { text-decoration: underline; }
+      .cell-loading {
+        display: inline-block;
+        width: 2.75rem;
+        height: 0.9rem;
+      }
+
+      /* === Analytics extras === */
+      .priority-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+      .priority-table th {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-align: left;
+        text-transform: uppercase;
+        color: var(--text-secondary-dm) !important;
+      }
+      .priority-table td {
+        padding: 0.5rem 0.6rem;
+        border-top: 1px solid var(--border-dm);
+        vertical-align: middle;
+      }
+      .priority-rank { color: var(--text-secondary-dm) !important; width: 2rem; }
+      .mini-bar {
+        display: inline-block;
+        width: 56px;
+        height: 6px;
+        margin-right: 0.4rem;
+        border-radius: 9999px;
+        background: rgba(120, 120, 120, 0.25);
+        overflow: hidden;
+        vertical-align: middle;
+      }
+      .mini-bar > i { display: block; height: 100%; border-radius: inherit; }
+      .kev-stats { display: flex; flex-wrap: wrap; gap: 1.75rem; margin: 0.25rem 0 1rem; }
+      .kev-stat b {
+        display: block;
+        font-size: 1.75rem;
+        font-weight: 600;
+        line-height: 1.1;
+        color: var(--text-primary-dm);
+      }
+      .kev-stat span { font-size: 0.75rem; color: var(--text-secondary-dm); }
+      .kev-recent-title {
+        margin-bottom: 0.25rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-secondary-dm);
+      }
+      .kev-recent { list-style: none; margin: 0; padding: 0; font-size: 0.8125rem; }
+      .kev-recent li {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.4rem 0;
+        border-top: 1px solid var(--border-dm);
+      }
+
+      /* === Product -> Version map legend === */
+      .map-legend {
+        display: inline-flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem 1.25rem;
+        font-size: 0.875rem;
+        color: var(--text-primary-dm);
+      }
+      .legend-item { display: inline-flex; align-items: center; gap: 0.5rem; }
+      .legend-swatch { width: 0.875rem; height: 0.875rem; border-radius: 9999px; }
+      .map-note {
+        margin-top: 0.5rem;
+        font-size: 0.8125rem;
+        color: var(--text-secondary-dm);
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .skeleton,
+        .stat-tile.is-loading .stat-value::after { animation: none; }
+        .stat-tile,
+        .stat-meter > span { transition: none; }
+      }
+
       @media (max-width: 768px) {
         .theme-toggle {
           top: 10px;
@@ -710,7 +1151,7 @@
 
       <!-- Search Form -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <form method="POST" action="/" id="searchForm" class="flex flex-wrap items-end gap-4">
+        <form id="searchForm" class="flex flex-wrap items-end gap-4">
           <!-- Product Name -->
           <div class="flex-1 min-w-[200px]">
             <label class="block text-sm font-medium text-gray-700 mb-1">
@@ -719,7 +1160,6 @@
             <input
               type="text"
               name="product_name"
-              value="{{ product|default('') }}"
               required
               placeholder="e.g., apache, openssl"
               class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
@@ -734,7 +1174,6 @@
             <input
               type="text"
               name="version"
-              value="{{ version|default('') }}"
               placeholder="e.g., 2.4.49"
               title="Only CVEs whose affected versions include this one are shown"
               class="w-full border-gray-300 border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
@@ -752,7 +1191,7 @@
           </div>
         </form>
 
-        <!-- Live scan progress (filled in by the search handler below) -->
+        <!-- Live scan progress: stays up while EPSS/KEV load, after the first results are already on screen -->
         <div id="scanProgress" class="mt-4" hidden aria-live="polite">
           <div class="flex justify-between text-sm mb-1">
             <span id="scanProgressMsg" class="text-gray-600">Starting...</span>
@@ -760,7 +1199,7 @@
           </div>
           <div class="progress-track"><div id="scanProgressFill" class="progress-fill"></div></div>
         </div>
-        <div id="scanError" class="notice notice-error mt-4" role="alert" {% if not error %}hidden{% endif %}>{{ error|default('') }}</div>
+        <div id="scanError" class="notice notice-error mt-4" role="alert" hidden></div>
 
         <p class="text-xs text-gray-500 mt-3">
           {% if api_key_persisted %}
@@ -770,73 +1209,13 @@
           {% endif %}
         </p>
       </div>
-      {% if results is not none %}
-      {% if warnings %}
-      <div class="notice notice-warn" role="status">
-        <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
-      </div>
-      {% endif %}
-      {% if version_summary %}
-      <div class="notice notice-info" role="status">
-        Version <strong>{{ version }}</strong>:
-        <strong>{{ version_summary.affected }}</strong> confirmed affected,
-        <strong>{{ version_summary.unverified }}</strong> unverified (NVD has no version data to check).
-        Hidden: <strong>{{ version_summary.excluded }}</strong> whose affected ranges don't include this version
-        and <strong>{{ version_summary.other_product }}</strong> that NVD lists under a different product
-        (if that looks wrong, try a shorter product name).
-      </div>
-      {% endif %}
 
-      <!-- Statistics Dashboard -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="stats-card border-blue-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm text-gray-600">Total CVEs</p>
-              <p class="text-2xl font-bold text-blue-600">
-                {{ results|length }}
-              </p>
-            </div>
-            <div class="text-blue-500 text-3xl">📊</div>
-          </div>
-        </div>
+      <!-- Everything below is filled in by the script as data arrives -->
+      <div id="results" hidden>
+      <div id="notices"></div>
 
-        <div class="stats-card border-red-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm text-gray-600">KEV Vulnerabilities</p>
-              <p class="text-2xl font-bold text-red-600">
-                {{ analytics.risk_distribution.kev_count }}
-              </p>
-            </div>
-            <div class="text-red-500 text-3xl">🚨</div>
-          </div>
-        </div>
-
-        <div class="stats-card border-orange-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm text-gray-600">High EPSS (≥0.7)</p>
-              <p class="text-2xl font-bold text-orange-600">
-                {{ analytics.risk_distribution.high_epss }}
-              </p>
-            </div>
-            <div class="text-orange-500 text-3xl">⚡</div>
-          </div>
-        </div>
-
-        <div class="stats-card border-purple-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-sm text-gray-600">Critical Severity</p>
-              <p class="text-2xl font-bold text-purple-600">
-                {{ analytics.severity_distribution.CRITICAL or 0 }}
-              </p>
-            </div>
-            <div class="text-purple-500 text-3xl">🔴</div>
-          </div>
-        </div>
-      </div>
+      <!-- Statistics Dashboard (tiles are built by buildTiles()) -->
+      <div class="stat-grid" id="statGrid" role="group" aria-label="Scan summary"></div>
 
       <!-- Tabs -->
       <div class="tabs" role="tablist" aria-label="Results view">
@@ -849,228 +1228,123 @@
       </div>
 
       <div class="tab-panel" id="tab-panel-list" role="tabpanel" aria-labelledby="tab-btn-list" tabindex="0">
-      <!-- Manual Export Options (No Auto-Save) -->
-      <div class="mb-6 flex flex-wrap gap-4 justify-between items-center">
-        <span class="text-sm text-gray-600">
-          Showing {{ results|length }} vulnerabilities sorted by risk priority
-        </span>
-        {% if version_summary %}
-        <label class="text-sm text-gray-600">
-          Version match:
-          <select id="versionMatchFilter" class="border border-gray-300 rounded-lg px-2 py-1 ml-1">
-            <option value="all">All</option>
-            <option value="Affected">Confirmed affected</option>
-            <option value="Unverified">Unverified</option>
-          </select>
-        </label>
-        {% endif %}
-        <div class="flex gap-2">
-          <button
-            onclick="downloadCSV()"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold shadow"
-          >
-            📄 Download CSV
-          </button>
-          <button
-            onclick="downloadExcel()"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-semibold shadow"
-          >
-            📊 Download Excel
-          </button>
+      <div class="table-card" id="tableCard">
+        <!-- These controls are moved into the table's toolbar once DataTables is initialised -->
+        <div id="toolbarStash" hidden>
+          <button type="button" class="tool-btn" id="tableFullscreenBtn" aria-pressed="false"></button>
+          <div class="toolbar-extras">
+            <label class="toolbar-filter" id="versionFilterWrap" hidden>
+              Version match
+              <select id="versionMatchFilter">
+                <option value="all">All</option>
+                <option value="Affected">Confirmed affected</option>
+                <option value="Unverified">Unverified</option>
+              </select>
+            </label>
+            <button type="button" class="tool-btn tool-btn-primary" id="btnCsv" onclick="downloadCSV()" disabled
+                    title="Available when the scan finishes">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV
+            </button>
+            <button type="button" class="tool-btn tool-btn-primary" id="btnExcel" onclick="downloadExcel()" disabled
+                    title="Available when the scan finishes">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Excel
+            </button>
+          </div>
         </div>
-      </div>
 
-      <!-- Enhanced Data Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-        <table
-          id="cve_table"
-          class="min-w-full divide-y divide-gray-200 text-sm"
-        >
-          <thead class="bg-gray-50">
+        <table id="cve_table" class="min-w-full text-sm">
+          <thead>
             <tr>
-              <th class="px-3 py-2">
+              <th class="col-cve">
                 CVE ID
-                <div><input class="dt-search" placeholder="Search CVE" /></div>
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by CVE ID" /></div>
               </th>
-              <th class="px-3 py-2">
+              <th class="col-risk">
                 Risk Level
-                <div><input class="dt-search" placeholder="Search Risk" /></div>
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by risk level" /></div>
               </th>
-              <th class="px-3 py-2">
+              <th class="col-cvss text-center">
                 CVSS
-                <div><input class="dt-search" placeholder="Search CVSS" /></div>
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by CVSS score" /></div>
               </th>
-              <th class="px-3 py-2">
-                EPSS Score
-                <div><input class="dt-search" placeholder="Search EPSS" /></div>
+              <th class="col-epss text-center" title="Exploit Prediction Scoring System score">
+                EPSS
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by EPSS score" /></div>
               </th>
-              <th class="px-3 py-2">
+              <th class="col-desc">
                 Description
-                <div>
-                  <input class="dt-search" placeholder="Search Description" />
-                </div>
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by description" /></div>
               </th>
-              <th class="px-3 py-2">
+              <th class="col-aff">
                 Affected Products
-                <div>
-                  <input class="dt-search" placeholder="Search Products" />
-                </div>
+                <div><input class="dt-search" placeholder="Filter" aria-label="Filter by affected products" /></div>
               </th>
             </tr>
           </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            {% for item in results %}
-            <tr
-              data-vm="{{ item.Version_Match }}"
-              class="hover:bg-gray-50 transition {% if item.KEV_Status == 'Known Exploited' %}kev-row {% elif item.Severity == 'CRITICAL' %}critical-row{% endif %}"
-            >
-              <!-- CVE ID -->
-              <td class="px-3 py-3">
-                <a
-                  href="{{ item.Link }}"
-                  class="text-blue-700 hover:underline font-semibold"
-                  target="_blank"
-                >
-                  {{ item.CVE }}
-                </a>
-                <div class="text-xs text-gray-500 mt-1">
-                  {% if item.CVE %} Year: {{ item.CVE.split('-')[1] }} {% endif
-                  %} {% if item.KEV_Status == 'Known Exploited' %}
-                  <div class="text-xs text-red-600 font-semibold mt-1">✓ Known Exploited</div>
-                  {% endif %} {% if item.Patch_Reference_Found %}
-                  <div class="text-xs text-green-600 mt-1" title="NVD lists a reference tagged 'Patch' for this CVE -- not a verified vendor fix">
-                    📎 Patch ref. in NVD
-                  </div>
-                  {% else %}
-                  <div class="text-xs text-red-600 mt-1" title="No reference tagged 'Patch' found in NVD's data for this CVE">No patch ref. in NVD</div>
-                  {% endif %}
-                  {% if item.CWE %}
-                  <div class="text-xs text-gray-500 mt-1" title="Weakness type (CWE)">{{ item.CWE }}</div>
-                  {% endif %}
-                  {% if item.Version_Match == 'Affected' %}
-                  <div><span class="vm-badge vm-affected" title="NVD's affected version ranges include {{ version }}">✔ Affects {{ version }}</span></div>
-                  {% elif item.Version_Match == 'Unverified' %}
-                  <div><span class="vm-badge vm-unverified" title="NVD has no version data for this product, so {{ version }} could not be checked">? Version unverified</span></div>
-                  {% endif %}
-                  <div class="flex gap-2 mt-1">
-                    <a href="{{ item.Link }}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">NVD</a>
-                    {% if item.EPSS_Score > 0 %}
-                    <a href="https://api.first.org/data/v1/epss?cve={{ item.CVE }}" target="_blank" class="text-green-700 hover:text-green-900 underline">EPSS</a>
-                    {% endif %}
-                  </div>
-                  <button type="button" class="details-btn" data-cve="{{ item.CVE }}">▸ Details</button>
-                </div>
-              </td>
-
-              <!-- Risk Level Badges -->
-              <td class="px-3 py-3">
-                {% if item.KEV_Status == 'Known Exploited' %}
-                <span class="badge-kev">🚨 KEV</span>
-                <br />
-                {% endif %} {% if item.Severity == 'CRITICAL' %}
-                <span class="badge-critical">CRITICAL</span>
-                {% elif item.Severity == 'HIGH' %}
-                <span class="badge-high">HIGH</span>
-                {% elif item.Severity == 'MEDIUM' %}
-                <span class="badge-medium">MEDIUM</span>
-                {% elif item.Severity == 'LOW' %}
-                <span class="badge-low">LOW</span>
-                {% else %}
-                <span class="badge-na">N/A</span>
-                {% endif %}
-              </td>
-
-              <!-- CVSS Score -->
-              <td class="px-3 py-3 text-center font-mono">{{ item.Score }}</td>
-
-              <!-- EPSS Score -->
-              <td class="px-3 py-3">
-                <div class="text-center">
-                  <span
-                    class="font-mono {% if item.EPSS_Score >= 0.7 %}epss-high {% elif item.EPSS_Score >= 0.3 %}epss-medium {% else %}epss-low{% endif %}"
-                  >
-                    {{ "%.3f"|format(item.EPSS_Score|float) }}
-                  </span>
-                </div>
-                <div class="text-xs text-gray-500 text-center">
-                  {{ "%.1f"|format((item.EPSS_Percentile|float) * 100) }}%ile
-                </div>
-              </td>
-
-              <!-- Description -->
-              <td class="px-3 py-3 max-w-xs">
-                <div
-                  class="text-sm text-gray-900 truncate"
-                  title="{{ item.Description[:500] }}"
-                >
-                  {{ item.Description[:150] }}{% if item.Description|length >
-                  150 %}...{% endif %}
-                </div>
-              </td>
-
-              <!-- Affected Products -->
-              <td class="px-3 py-3 max-w-xs">
-                <div
-                  class="text-sm text-gray-600 truncate"
-                  title="{{ item.Affected_Products[:400] }}"
-                >
-                  {{ item.Affected_Products[:100] }}{% if
-                  item.Affected_Products|length > 100 %}...{% endif %}
-                </div>
-                {% if item.Affected_Products_Detailed %}
-                <div class="text-xs text-gray-500 mt-1">
-                  Versions: {% for detail in item.Affected_Products_Detailed[:3]
-                  %} {{ detail.vendor }} {{ detail.version }}{% if not loop.last
-                  %}, {% endif %} {% endfor %} {% if
-                  item.Affected_Products_Detailed|length > 3 %}...{% endif %}
-                </div>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
+          <tbody></tbody>
         </table>
       </div>
       </div>
       <!-- /tab-panel-list -->
 
       <div class="tab-panel" id="tab-panel-analytics" role="tabpanel" aria-labelledby="tab-btn-analytics" tabindex="0" hidden>
-      <!-- Analytics Charts -->
+      <div id="analyticsPending" class="pending-note">
+        <span id="analyticsPendingMsg">Charts appear when the scan finishes -- EPSS and KEV data are still loading.</span>
+        <div class="skeleton-grid" aria-hidden="true">
+          <div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>
+        </div>
+      </div>
+
+      <div id="analyticsContent" hidden>
+      <!-- Priority list -->
+      <div class="chart-container mb-4" style="min-height: 0">
+        <h3>🔥 Fix these first</h3>
+        <p class="text-xs text-gray-500 mb-2">Known-exploited CVEs first, then by EPSS (likelihood of exploitation), then CVSS.</p>
+        <div id="priorityList" class="overflow-x-auto"></div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <!-- Risk Distribution Chart -->
         <div class="chart-container">
           <h3>📊 Risk Distribution</h3>
           <div class="chart-canvas-wrap"><canvas id="riskChart"></canvas></div>
         </div>
 
-        <!-- EPSS vs CVSS Scatter Plot -->
+        <div class="chart-container">
+          <h3>🧮 Severity Breakdown (CVSS)</h3>
+          <div class="chart-canvas-wrap"><canvas id="severityChart"></canvas></div>
+        </div>
+
         <div class="chart-container">
           <h3>🎯 EPSS vs CVSS Correlation</h3>
           <div class="chart-canvas-wrap"><canvas id="correlationChart"></canvas></div>
         </div>
-      </div>
 
-      <!-- Additional Analytics -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <!-- Vulnerability Trends Over Time -->
+        <div class="chart-container">
+          <h3>🌐 Attack Vector</h3>
+          <div class="chart-canvas-wrap"><canvas id="vectorChart"></canvas></div>
+        </div>
+
         <div class="chart-container">
           <h3>📈 Vulnerability Trends by Year</h3>
           <div class="chart-canvas-wrap"><canvas id="trendsChart"></canvas></div>
         </div>
 
-        <!-- Top Affected Vendors -->
         <div class="chart-container">
           <h3>🏢 Top Affected Vendors</h3>
           <div class="chart-canvas-wrap"><canvas id="vendorChart"></canvas></div>
         </div>
-      </div>
 
-      <!-- Enhanced Features Section -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        <!-- Most Vulnerable Versions -->
         <div class="chart-container">
           <h3>📦 Most Vulnerable Product Versions</h3>
           <div class="chart-canvas-wrap"><canvas id="versionChart"></canvas></div>
+        </div>
+
+        <div class="chart-container">
+          <h3>🧩 Top Weakness Types (CWE)</h3>
+          <div class="chart-canvas-wrap"><canvas id="cweChart"></canvas></div>
         </div>
 
         <!-- Patch Reference Status (meter, not a 2-slice donut) -->
@@ -1087,6 +1361,12 @@
             <p class="text-xs text-gray-500 mt-2">Share of CVEs with at least one NVD reference tagged "Patch" -- not a verified vendor fix.</p>
           </div>
         </div>
+
+        <div class="chart-container">
+          <h3>🚨 Known Exploited (CISA KEV)</h3>
+          <div id="kevSpotlight"></div>
+        </div>
+      </div>
       </div>
       </div>
       <!-- /tab-panel-analytics -->
@@ -1097,38 +1377,30 @@
         <h3 class="text-xl font-bold text-gray-900 mb-4 text-center">
           🔗 Product → Version Map
         </h3>
-        <div class="dependency-graph bg-white rounded-lg shadow-lg p-4" id="dependencyGraphContainer">
-          <button class="fullscreen-toggle" id="depGraphFullscreenBtn" type="button">⛶ Fullscreen</button>
-          <svg id="dependency-svg"></svg>
-        </div>
-        <div class="text-center mt-2">
-          <div class="inline-flex items-center space-x-4 text-sm">
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-blue-500 rounded-full mr-2"></div>
-              <span>Products</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-green-500 rounded-full mr-2"></div>
-              <span>Versions</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-red-500 rounded-full mr-2"></div>
-              <span>Critical/High Risk</span>
-            </div>
+        <div id="mapPending" class="pending-note">The map is built when the scan finishes -- EPSS and KEV data are still loading.</div>
+        <div id="mapContent" hidden>
+          <div class="dependency-graph bg-white rounded-lg shadow-lg p-4" id="dependencyGraphContainer">
+            <button class="fullscreen-toggle" id="depGraphFullscreenBtn" type="button">⛶ Fullscreen</button>
+            <svg id="dependency-svg"></svg>
           </div>
-          <p id="depGraphDensityHint" class="text-xs text-gray-500 mt-2" style="display:none">
-            Version labels are hidden for readability on large graphs -- hover a node for details.
-          </p>
-          {% if results|length > graph_limit %}
-          <p class="text-xs text-gray-500 mt-2">
-            Built from the {{ graph_limit }} highest-risk CVEs of {{ results|length }} to keep the map readable.
-          </p>
-          {% endif %}
+          <div class="text-center mt-3">
+            <div class="map-legend" role="list" aria-label="Legend">
+              <span class="legend-item" role="listitem"><i class="legend-swatch" style="background: var(--node-product)"></i>Products</span>
+              <span class="legend-item" role="listitem"><i class="legend-swatch" style="background: var(--node-version)"></i>Versions</span>
+              <span class="legend-item" role="listitem"><i class="legend-swatch" style="background: var(--st-critical)"></i>Critical risk</span>
+              <span class="legend-item" role="listitem"><i class="legend-swatch" style="background: var(--st-serious)"></i>High risk</span>
+            </div>
+            <p id="depGraphDensityHint" class="map-note" hidden>
+              Version labels are hidden for readability on large graphs -- hover a node for details.
+            </p>
+            <p id="depGraphLimitNote" class="map-note" hidden></p>
+          </div>
         </div>
       </div>
       </div>
       <!-- /tab-panel-map -->
-      {% endif %}
+      </div>
+      <!-- /results -->
       </div>
       <!-- /site-panel-scanner -->
 
@@ -1184,802 +1456,1276 @@
     </div>
 
     <script>
-            // The finished scan lives server-side; exports and CVE details refer to it by id
-            const jobId = {{ job_id|default('')|tojson }};
+      // Set by the server; everything else on the page is loaded by the script below
+      const initialJobId = {{ job_id|default('')|tojson }};
+      const GRAPH_LIMIT = {{ graph_limit|default(100) }};
+    </script>
 
-            // Manual CSV / Excel export only (no auto-save)
-            function downloadCSV() {
-                window.open(`/download/csv?job=${encodeURIComponent(jobId)}`, '_blank');
-            }
+    <script>
+    {% raw %}
+      /* ================= helpers ================= */
+      // HTML-escape text from NVD before putting it in the page
+      function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => (
+          { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+      function safeUrl(url) {
+        return /^https?:\/\//i.test(url) ? url : '#';
+      }
+      const fmtInt = n => Number(n || 0).toLocaleString();
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-            function downloadExcel() {
-                window.open(`/download/excel?job=${encodeURIComponent(jobId)}`, '_blank');
-            }
+      async function getJSON(url) {
+        const r = await fetch(url);
+        if (!r.ok) {
+          const err = new Error('HTTP ' + r.status);
+          err.status = r.status;
+          throw err;
+        }
+        return r.json();
+      }
 
-            {% if results %}
-            const analytics = {{ analytics | tojson }};
+      function fmtPct(n, total) {
+        if (!total || !n) return '0%';
+        const p = (n / total) * 100;
+        if (n > 0 && p < 1) return '<1%';
+        return (p < 10 ? p.toFixed(1) : Math.round(p)) + '%';
+      }
 
+      const ICON = {
+        max: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+        min: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
+      };
 
-            // Initialize FIXED Charts
-            $(document).ready(function () {
-                window.cveCharts = {};
+      /* ================= state ================= */
+      const state = {
+        jobId: '',
+        run: 0,              // bumped on every new scan; stale async work compares against it
+        status: null,        // latest /api/scan/<id> response
+        loaded: 0,           // rows fetched so far
+        table: null,         // DataTable, created when the first rows arrive
+        enrichSeen: 0,
+        lastEnrich: 0,
+        version: '',
+        product: '',
+        formFilled: false,
+        noticeKey: '',
+        epssPending: true,   // true until the EPSS stage is over (rows without a score show a placeholder)
+        done: false,
+        failed: false,
+        analytics: null,
+        analyticsBuilt: false,
+        graph: null,
+        graphBuilt: false,
+      };
+      const charts = (window.cveCharts = {});
 
-                // Risk Distribution Pie Chart
-                const ctx1 = document.getElementById('riskChart').getContext('2d');
-                window.cveCharts.risk = new Chart(ctx1, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['KEV', 'High EPSS (≥0.7)', 'Medium EPSS (0.3-0.7)', 'Low EPSS (<0.3)'],
-                        datasets: [{
-                            data: [
-                                {{ analytics.risk_distribution.kev_count }},
-                                {{ analytics.risk_distribution.high_epss }},
-                                {{ analytics.risk_distribution.medium_epss }},
-                                {{ analytics.risk_distribution.low_epss }}
-                            ],
-                            backgroundColor: ['#d03b3b', '#ec835a', '#fab219', '#0ca30c']
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }
-                        }
-                    }
-                });
+      /* ================= full page (shared by the CVE table and the map) ================= */
+      let activeFullscreen = null;
+      function bindFullscreen(container, button, { labels, onChange }) {
+        const api = {
+          isOn: () => container.classList.contains('is-fullscreen'),
+          set(on) {
+            container.classList.toggle('is-fullscreen', on);
+            button.innerHTML = on ? labels[1] : labels[0];
+            button.setAttribute('aria-pressed', String(on));
+            document.body.style.overflow = on ? 'hidden' : '';
+            activeFullscreen = on ? api : (activeFullscreen === api ? null : activeFullscreen);
+            // Wait for the layout change to settle before re-measuring
+            if (onChange) setTimeout(() => onChange(on), 50);
+          },
+        };
+        button.innerHTML = labels[0];
+        button.addEventListener('click', () => api.set(!api.isOn()));
+        return api;
+      }
+      function exitFullscreen() {
+        if (activeFullscreen) activeFullscreen.set(false);
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') exitFullscreen();
+      });
 
+      /* ================= stat tiles ================= */
+      const TILE_ICONS = {
+        total: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>',
+        kev: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>',
+        epss: '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+        critical: '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+      };
+      const TILES = [
+        { key: 'total', label: 'Total CVEs', tone: '' },
+        { key: 'kev', label: 'Known exploited (KEV)', tone: 'critical' },
+        { key: 'epss', label: 'High EPSS (≥ 0.7)', tone: 'serious' },
+        { key: 'critical', label: 'Critical severity', tone: 'critical' },
+      ];
 
-                // EPSS vs CVSS Scatter Plot
-                const ctx2 = document.getElementById('correlationChart').getContext('2d');
-                const scatterData = {{ analytics.epss_cvss_data | tojson }};
+      function buildTiles() {
+        $('#statGrid').html(TILES.map(t => `
+          <div class="stat-tile is-loading" data-tile="${t.key}"${t.tone ? ` data-tone="${t.tone}"` : ''} aria-busy="true">
+            <div class="stat-top">
+              <span class="stat-label">${t.label}</span>
+              <span class="stat-icon">${TILE_ICONS[t.key]}</span>
+            </div>
+            <div class="stat-value" data-v="0">0</div>
+            <div class="stat-meter"${t.key === 'total' ? ' style="visibility:hidden"' : ''}><span></span></div>
+            <div class="stat-caption"></div>
+          </div>`).join(''));
+      }
 
+      function animateNumber(el, to) {
+        const from = Number(el.dataset.v || 0);
+        el.dataset.v = to;
+        cancelAnimationFrame(el._raf);
+        if (from === to || prefersReducedMotion()) {
+          el.textContent = fmtInt(to);
+          return;
+        }
+        const t0 = performance.now();
+        const step = (now) => {
+          const k = Math.min(1, (now - t0) / 500);
+          const eased = 1 - Math.pow(1 - k, 3);
+          el.textContent = fmtInt(Math.round(from + (to - from) * eased));
+          if (k < 1) el._raf = requestAnimationFrame(step);
+        };
+        el._raf = requestAnimationFrame(step);
+      }
 
-                window.cveCharts.correlation = new Chart(ctx2, {
-                    type: 'scatter',
-                    data: {
-                        datasets: [{
-                            label: 'KEV',
-                            data: scatterData.filter(d => d.kev),
-                            backgroundColor: '#d03b3b',
-                            pointRadius: 4,
-                            pointHitRadius: 14
-                        }, {
-                            label: 'Non-KEV',
-                            data: scatterData.filter(d => !d.kev),
-                            backgroundColor: '#0ca30c',
-                            pointRadius: 3,
-                            pointHitRadius: 14
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: {
-                                title: { display: true, text: 'CVSS Score' },
-                                min: 0, max: 10,
-                                ticks: { font: { size: 10 } }
-                            },
-                            y: {
-                                title: { display: true, text: 'EPSS Score' },
-                                min: 0, max: 1,
-                                ticks: { font: { size: 10 } }
-                            }
-                        },
-                        plugins: {
-                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
-                        }
-                    }
-                });
+      // value === null means "could not be loaded" (the scan failed before this data arrived)
+      function setTile(key, value, { loading = false, pct = null, caption = '' } = {}) {
+        const el = document.querySelector(`.stat-tile[data-tile="${key}"]`);
+        if (!el) return;
+        el.classList.toggle('is-loading', loading);
+        el.setAttribute('aria-busy', String(loading));
+        const valueEl = el.querySelector('.stat-value');
+        if (value === null) {
+          cancelAnimationFrame(valueEl._raf);
+          valueEl.textContent = '—';
+          valueEl.dataset.v = 0;
+        } else if (!loading) {
+          animateNumber(valueEl, value);
+        }
+        const fill = el.querySelector('.stat-meter > span');
+        if (fill && pct !== null) fill.style.width = (value > 0 ? Math.max(pct, 2) : 0) + '%';
+        el.querySelector('.stat-caption').textContent = caption;
+      }
 
+      function updateTiles() {
+        const s = state.status || {};
+        let total = 0, kev = 0, epss = 0, critical = 0;
+        if (state.table) {
+          state.table.data().each(d => {
+            total++;
+            if (d.kev) kev++;
+            if (d.epss >= 0.7) epss++;
+            if (d.severity === 'CRITICAL') critical++;
+          });
+        }
+        const nvdDone = state.done || (s.stage && s.stage !== 'nvd');
+        const kevReady = state.done || (s.enrich_version || 0) >= 1;
+        const epssStarted = state.done || (s.enrich_version || 0) >= 2;
+        const epssDone = state.done || s.stage === 'analytics';
+        const pct = n => (total ? (n / total) * 100 : 0);
+        const share = n => `${fmtPct(n, total)} of ${nvdDone ? 'all results' : 'results so far'}`;
 
-                // Vulnerability Trends Over Time
-                const ctx3 = document.getElementById('trendsChart').getContext('2d');
-                const yearTrends = {{ analytics.year_trends | tojson }};
-                const years = Object.keys(yearTrends).sort();
-                const counts = years.map(year => yearTrends[year]);
+        setTile('total', total, {
+          caption: nvdDone
+            ? `Matching “${state.product}”${state.version ? ' · v' + state.version : ''}`
+            : 'Still loading from NVD…',
+        });
+        setTile('critical', critical, { pct: pct(critical), caption: share(critical) });
 
+        if (kevReady) setTile('kev', kev, { pct: pct(kev), caption: share(kev) });
+        else if (state.failed) setTile('kev', null, { caption: 'Not loaded' });
+        else setTile('kev', 0, { loading: true, caption: 'Checking CISA KEV…' });
 
-                window.cveCharts.trends = new Chart(ctx3, {
-                    type: 'line',
-                    data: {
-                        labels: years,
-                        datasets: [{
-                            label: 'CVE Count',
-                            data: counts,
-                            borderColor: '#2a78d6',
-                            backgroundColor: 'rgba(42, 120, 214, 0.1)',
-                            borderWidth: 2,
-                            borderCapStyle: 'round',
-                            tension: 0.1,
-                            fill: true,
-                            pointRadius: 3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: { display: true, text: 'CVEs' },
-                                ticks: { font: { size: 10 } }
-                            },
-                            x: {
-                                title: { display: true, text: 'Year' },
-                                ticks: { font: { size: 10 } }
-                            }
-                        },
-                        plugins: {
-                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
-                        }
-                    }
-                });
+        if (epssStarted) {
+          setTile('epss', epss, { pct: pct(epss), caption: epssDone || state.failed ? share(epss) : 'Loading EPSS scores…' });
+        } else if (state.failed) {
+          setTile('epss', null, { caption: 'Not loaded' });
+        } else {
+          setTile('epss', 0, { loading: true, caption: 'Waiting for EPSS…' });
+        }
+      }
 
+      /* ================= progress, notices, errors ================= */
+      let timerId = null;
+      function startTimer() {
+        stopTimer();
+        const started = Date.now();
+        $('#scanProgressTime').text('0s');
+        timerId = setInterval(() => $('#scanProgressTime').text(Math.round((Date.now() - started) / 1000) + 's'), 1000);
+      }
+      function stopTimer() {
+        clearInterval(timerId);
+        timerId = null;
+      }
+      function setProgress(message, fraction) {
+        $('#scanProgressMsg').text(message);
+        $('#scanProgressFill').css('width', Math.round(Math.max(0.02, fraction) * 100) + '%');
+      }
+      function setSearching(on) {
+        const btn = $('#searchForm button[type="submit"]');
+        if (on) btn.html('🔍 Searching...').prop('disabled', true);
+        else btn.text('Search').prop('disabled', false);
+      }
 
-                // Top Affected Vendors
-                const ctx4 = document.getElementById('vendorChart').getContext('2d');
-                const vendorData = {{ analytics.vendor_analysis | tojson }};
-                const topVendors = Object.entries(vendorData)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 8);
+      function renderNotices(s) {
+        const key = JSON.stringify([s.warnings, s.version_summary, s.version]);
+        if (key === state.noticeKey) return;
+        state.noticeKey = key;
+        const parts = [];
+        if (s.warnings && s.warnings.length) {
+          parts.push(`<div class="notice notice-warn" role="status"><ul>${s.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`);
+        }
+        const v = s.version_summary;
+        if (v) {
+          parts.push(`<div class="notice notice-info" role="status">
+            Version <strong>${esc(s.version)}</strong>:
+            <strong>${fmtInt(v.affected)}</strong> confirmed affected,
+            <strong>${fmtInt(v.unverified)}</strong> unverified (NVD has no version data to check).
+            Hidden: <strong>${fmtInt(v.excluded)}</strong> whose affected ranges don't include this version
+            and <strong>${fmtInt(v.other_product)}</strong> that NVD lists under a different product
+            (if that looks wrong, try a shorter product name).</div>`);
+        }
+        $('#notices').html(parts.join(''));
+      }
 
+      function failScan(message) {
+        stopTimer();
+        state.failed = true;
+        $('#scanProgress').prop('hidden', true);
+        $('#scanError').text(message).prop('hidden', false);
+        setSearching(false);
+        if (state.table) {
+          state.epssPending = false;
+          state.table.rows().invalidate('data').draw(false);
+          updateTiles();
+        }
+        if (!state.table) history.replaceState(null, '', '/');
+      }
 
-                window.cveCharts.vendor = new Chart(ctx4, {
-                    type: 'bar',
-                    data: {
-                        labels: topVendors.map(v => v[0]),
-                        datasets: [{
-                            label: 'CVE Count',
-                            data: topVendors.map(v => v[1]),
-                            backgroundColor: '#2a78d6',
-                            borderRadius: 4,
-                            maxBarThickness: 24,
-                            barPercentage: 0.7,
-                            categoryPercentage: 0.8
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        indexAxis: 'y',
-                        scales: {
-                            x: {
-                                beginAtZero: true,
-                                title: { display: true, text: 'CVEs' },
-                                ticks: { font: { size: 10 } }
-                            },
-                            y: {
-                                ticks: { font: { size: 10 } }
-                            }
-                        },
-                        plugins: {
-                            legend: { labels: { boxWidth: 12, font: { size: 10 } } }
-                        }
-                    }
-                });
+      /* ================= CVE table ================= */
+      const SEV_RANK = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
+      const SEV_CLASS = { CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low' };
+      const epssColor = e => (e >= 0.7 ? '#d03b3b' : e >= 0.3 ? '#ec835a' : '#0ca30c');
 
-                // NEW: Most Vulnerable Versions Chart
-                const ctx5 = document.getElementById('versionChart').getContext('2d');
-                const versionData = analytics.top_vulnerable_versions || {};
-                const topVersions = Object.entries(versionData)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 8);
+      function cveSortKey(id) {
+        const m = /^CVE-(\d+)-(\d+)$/.exec(id);
+        return m ? Number(m[1]) * 1e8 + Number(m[2]) : 0;
+      }
+      function riskBadges(kev, severity, sep) {
+        const cls = SEV_CLASS[severity];
+        return (kev ? `<span class="badge-kev">🚨 KEV</span>${sep}` : '') +
+          `<span class="badge-${cls || 'na'}">${esc(cls ? severity : 'N/A')}</span>`;
+      }
+      const wantsSortKey = type => type === 'sort' || type === 'type';
 
-                window.cveCharts.version = new Chart(ctx5, {
-                    type: 'bar',
-                    data: {
-                        labels: topVersions.map(v => v[0].length > 15 ? v[0].substring(0, 15) + '...' : v[0]),
-                        datasets: [{
-                            label: 'CVE Count',
-                            data: topVersions.map(v => v[1]),
-                            backgroundColor: '#2a78d6',
-                            borderRadius: 4,
-                            maxBarThickness: 24,
-                            barPercentage: 0.7,
-                            categoryPercentage: 0.8
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                title: { display: true, text: 'CVEs' },
-                                ticks: { font: { size: 10 } }
-                            },
-                            x: {
-                                ticks: { font: { size: 10 } }
-                            }
-                        },
-                        plugins: {
-                            legend: { labels: { boxWidth: 12, font: { size: 10 } } },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const fullLabel = topVersions[context.dataIndex][0];
-                                        return `${fullLabel}: ${context.parsed.y} CVEs`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+      function renderCveCol(cve, type, d) {
+        if (wantsSortKey(type)) return cveSortKey(cve);
+        if (type === 'filter') {
+          return [cve, d.cwe, d.patch ? 'Patch ref. in NVD' : 'No patch ref. in NVD',
+            d.vm === 'Affected' ? 'Affects ' + state.version : d.vm === 'Unverified' ? 'Version unverified' : '']
+            .filter(Boolean).join(' ');
+        }
+        const chips = [];
+        if (d.cwe) chips.push(`<span class="meta-chip" title="Weakness type (CWE): ${esc(d.cwe)}">${esc(d.cwe)}</span>`);
+        chips.push(d.patch
+          ? `<span class="meta-chip meta-good" title="NVD lists a reference tagged 'Patch' for this CVE -- not a verified vendor fix">✓ Patch ref.</span>`
+          : `<span class="meta-chip" title="No reference tagged 'Patch' found in NVD's data for this CVE">No patch ref.</span>`);
+        let badge = '';
+        if (d.vm === 'Affected') {
+          badge = `<div><span class="vm-badge vm-affected" title="NVD's affected version ranges include ${esc(state.version)}">✔ Affects ${esc(state.version)}</span></div>`;
+        } else if (d.vm === 'Unverified') {
+          badge = `<div><span class="vm-badge vm-unverified" title="NVD has no version data for this product, so ${esc(state.version)} could not be checked">? Version unverified</span></div>`;
+        }
+        return `<a href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(cve)}" class="cve-id text-blue-700 hover:underline" target="_blank" rel="noopener">${esc(cve)}</a>` +
+          `<div class="cve-meta">${chips.join('')}</div>${badge}` +
+          `<button type="button" class="details-btn" data-cve="${esc(cve)}">${d._open ? '▾' : '▸'} Details</button>`;
+      }
 
-                // Patch Reference meter (replaces the old 2-slice donut)
-                const patchData = analytics.patch_status || {patched: 0, unpatched: 0};
-                const patchTotal = patchData.patched + patchData.unpatched;
-                const patchPct = patchTotal ? Math.round((patchData.patched / patchTotal) * 100) : 0;
-                document.getElementById('patchMeterPct').textContent = patchPct + '%';
-                document.getElementById('patchMeterFill').style.width = patchPct + '%';
-                document.getElementById('patchMeterCounts').textContent =
-                    `${patchData.patched} of ${patchTotal} CVEs`;
+      function renderRiskCol(_, type, d) {
+        if (wantsSortKey(type)) return (d.kev ? 10 : 0) + (SEV_RANK[d.severity] || 0);
+        if (type === 'filter') return (d.kev ? 'KEV Known Exploited ' : '') + d.severity;
+        return riskBadges(d.kev, d.severity, '<br />');
+      }
 
-                // Product -> Version Map (D3 force-directed graph)
-                const dependencyData = analytics.dependency_graph;
+      function renderScoreCol(score, type) {
+        const num = typeof score === 'number';
+        if (wantsSortKey(type)) return num ? score : -1;
+        if (type === 'filter') return num ? score.toFixed(1) : 'N/A';
+        return `<span class="font-mono">${num ? score.toFixed(1) : 'N/A'}</span>`;
+      }
 
-                if (dependencyData && dependencyData.nodes && dependencyData.nodes.length > 0) {
-                    const svgEl = document.getElementById('dependency-svg');
-                    const graphContainer = document.getElementById('dependencyGraphContainer');
-                    const svg = d3.select(svgEl);
-                    const zoomLayer = svg.append("g").attr("class", "zoom-layer");
+      function renderEpssCol(epss, type, d) {
+        if (wantsSortKey(type)) return epss || 0;
+        if (type === 'filter') return epss ? epss.toFixed(3) : '';
+        if (!epss) {
+          if (state.epssPending) return '<span class="cell-loading skeleton"></span>';
+          if (state.failed) return '<span class="text-gray-500">n/a</span>';
+        }
+        const cls = epss >= 0.7 ? 'epss-high' : epss >= 0.3 ? 'epss-medium' : 'epss-low';
+        return `<span class="font-mono ${cls}">${(epss || 0).toFixed(3)}</span>` +
+          `<div class="text-xs text-gray-500">${((d.epss_pct || 0) * 100).toFixed(1)}%ile</div>` +
+          (epss > 0
+            ? `<a class="epss-link" href="https://api.first.org/data/v1/epss?cve=${encodeURIComponent(d.cve)}" target="_blank" rel="noopener">EPSS ↗</a>`
+            : '');
+      }
 
-                    // Create tooltip
-                    const tooltip = d3.select("body").append("div")
-                        .attr("class", "tooltip")
-                        .style("opacity", 0);
+      function renderDescCol(desc, type) {
+        if (type !== 'display') return desc;
+        return `<div class="cell-clamp cell-desc text-sm text-gray-900" title="${esc(desc)}">${esc(desc.slice(0, 150))}</div>`;
+      }
 
-                    function currentSize() {
-                        const rect = svgEl.getBoundingClientRect();
-                        return { width: rect.width || 800, height: rect.height || 500 };
-                    }
+      function renderAffCol(aff, type, d) {
+        if (wantsSortKey(type)) return aff;
+        if (type === 'filter') return aff + ' ' + d.versions;
+        return `<div class="cell-clamp text-sm text-gray-600" title="${esc(aff)}">${esc(aff.slice(0, 100))}${aff.length > 100 ? '…' : ''}</div>` +
+          (d.versions
+            ? `<div class="cell-clamp text-xs text-gray-500 mt-1">Versions: ${esc(d.versions)}${d.more_versions ? ' …' : ''}</div>`
+            : '');
+      }
 
-                    let { width, height } = currentSize();
-                    svg.attr("viewBox", `0 0 ${width} ${height}`);
+      function initTable() {
+        const table = $('#cve_table').DataTable({
+          data: [],
+          deferRender: true,       // only the visible page's rows are built into the DOM
+          autoWidth: false,
+          scrollX: true,
+          paging: true,
+          pageLength: 25,
+          lengthMenu: [10, 25, 50, 100],
+          info: true,
+          searching: true,
+          order: [[0, 'desc']],
+          dom: '<"table-toolbar"l>rt<"table-footer"ip>',
+          language: {
+            lengthMenu: 'Show _MENU_ entries',
+            info: 'Showing _START_–_END_ of _TOTAL_ CVEs',
+            infoEmpty: 'No CVEs to show',
+            infoFiltered: '(filtered from _MAX_)',
+            emptyTable: 'No CVEs found for this search.',
+            zeroRecords: 'No CVEs match the current filters.',
+          },
+          columns: [
+            { data: 'cve', className: 'col-cve', render: renderCveCol },
+            { data: null, className: 'col-risk', render: renderRiskCol },
+            { data: 'score', className: 'col-cvss text-center', render: renderScoreCol },
+            { data: 'epss', className: 'col-epss text-center', render: renderEpssCol },
+            { data: 'desc', className: 'col-desc', render: renderDescCol },
+            { data: 'affected', className: 'col-aff', render: renderAffCol },
+          ],
+          // Runs on every draw, so rows pick up KEV status that arrives after they were created
+          rowCallback: (tr, d) => {
+            tr.dataset.vm = d.vm;
+            tr.classList.toggle('kev-row', d.kev);
+            tr.classList.toggle('critical-row', !d.kev && d.severity === 'CRITICAL');
+          },
+        });
+        state.table = table;
 
-                    // Hub nodes with many versions need proportionally more room, or
-                    // labels/nodes crowd into an unreadable cluster near the center.
-                    const isDense = dependencyData.nodes.length > 25;
-                    const linkDistance = Math.min(200, 70 + dependencyData.nodes.length * 2.5);
-                    const densityHint = document.getElementById('depGraphDensityHint');
-                    if (densityHint) densityHint.style.display = isDense ? '' : 'none';
+        // Move the full-page button and the filter/export controls into the table's toolbar
+        const toolbar = $(table.table().container()).find('.table-toolbar');
+        const stash = $('#toolbarStash');
+        toolbar.prepend(stash.children('#tableFullscreenBtn'));
+        toolbar.append(stash.children('.toolbar-extras'));
 
-                    const simulation = d3.forceSimulation(dependencyData.nodes)
-                        .force("link", d3.forceLink(dependencyData.links).id(d => d.id).distance(linkDistance))
-                        .force("charge", d3.forceManyBody().strength(-260))
-                        .force("center", d3.forceCenter(width / 2, height / 2))
-                        .force("collision", d3.forceCollide().radius(28));
-
-                    const link = zoomLayer.append("g")
-                        .selectAll("line")
-                        .data(dependencyData.links)
-                        .enter().append("line")
-                        .attr("class", "link");
-
-                    const node = zoomLayer.append("g")
-                        .selectAll("circle")
-                        .data(dependencyData.nodes)
-                        .enter().append("circle")
-                        .attr("r", d => d.type === 'product' ? 12 : 8)
-                        .attr("class", d => {
-                            let baseClass = `node-${d.type}`;
-                            if (d.severity === 'CRITICAL') {
-                                baseClass += ' node-critical';
-                            } else if (d.severity === 'HIGH') {
-                                baseClass += ' node-high';
-                            }
-                            return baseClass;
-                        })
-                        .on("mouseover", function(event, d) {
-                            let tooltipText = `${d.id}`;
-                            if (d.type === 'version' && d.cve_id) {
-                                tooltipText += `<br/>CVE: ${d.cve_id}<br/>Severity: ${d.severity}`;
-                                if (d.epss_score) tooltipText += `<br/>EPSS: ${d.epss_score.toFixed(3)}`;
-                                if (d.patch_reference_found) tooltipText += `<br/>Patch ref. in NVD`;
-                            } else if (d.type === 'product' && d.cve_count) {
-                                tooltipText += `<br/>CVEs: ${d.cve_count}`;
-                            }
-
-                            tooltip.transition().duration(200).style("opacity", .9);
-                            tooltip.html(tooltipText)
-                                .style("left", (event.pageX + 10) + "px")
-                                .style("top", (event.pageY - 28) + "px");
-                        })
-                        .on("mouseout", function(d) {
-                            tooltip.transition().duration(500).style("opacity", 0);
-                        })
-                        .call(d3.drag()
-                            .on("start", dragstarted)
-                            .on("drag", dragged)
-                            .on("end", dragended));
-
-                    // Labels: full product name / version string (ellipsis past ~13 chars),
-                    // relying on the tooltip above for the rest of the detail. When the
-                    // graph is dense, only product labels render -- version labels alone
-                    // would overlap into an unreadable cluster, so those rely on hover.
-                    const text = zoomLayer.append("g")
-                        .selectAll("text")
-                        .data(isDense ? dependencyData.nodes.filter(d => d.type === 'product') : dependencyData.nodes)
-                        .enter().append("text")
-                        .attr("class", "node-text")
-                        .text(d => {
-                            const parts = d.id.split(':');
-                            const label = parts[parts.length - 1];
-                            return label.length > 13 ? label.substring(0, 12) + '…' : label;
-                        });
-
-                    // Zoom/pan so dense graphs stay usable
-                    const zoomBehavior = d3.zoom()
-                        .scaleExtent([0.3, 4])
-                        .on("zoom", (event) => zoomLayer.attr("transform", event.transform));
-                    svg.call(zoomBehavior);
-
-                    // A hub with many spokes can lay out larger than the visible box --
-                    // auto-fit the content once positions settle, instead of leaving it
-                    // stuck at 1:1 zoom where most/all nodes render off-screen.
-                    function fitToView() {
-                        const xs = dependencyData.nodes.map(d => d.x).filter(Number.isFinite);
-                        const ys = dependencyData.nodes.map(d => d.y).filter(Number.isFinite);
-                        if (!xs.length) return;
-                        const pad = 40;
-                        const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
-                        const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
-                        const contentW = Math.max(1, maxX - minX);
-                        const contentH = Math.max(1, maxY - minY);
-                        const scale = Math.max(0.3, Math.min(1.2, Math.min(width / contentW, height / contentH)));
-                        const tx = width / 2 - scale * (minX + maxX) / 2;
-                        const ty = height / 2 - scale * (minY + maxY) / 2;
-                        svg.transition().duration(300)
-                            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
-                    }
-                    simulation.on("end", fitToView);
-
-                    simulation.on("tick", () => {
-                        link
-                            .attr("x1", d => d.source.x)
-                            .attr("y1", d => d.source.y)
-                            .attr("x2", d => d.target.x)
-                            .attr("y2", d => d.target.y);
-
-                        node
-                            .attr("cx", d => d.x)
-                            .attr("cy", d => d.y);
-
-                        text
-                            .attr("x", d => d.x)
-                            .attr("y", d => d.y);
-                    });
-
-                    function dragstarted(event, d) {
-                        if (!event.active) simulation.alphaTarget(0.3).restart();
-                        d.fx = d.x;
-                        d.fy = d.y;
-                    }
-
-                    function dragged(event, d) {
-                        d.fx = event.x;
-                        d.fy = event.y;
-                    }
-
-                    function dragended(event, d) {
-                        if (!event.active) simulation.alphaTarget(0);
-                        d.fx = null;
-                        d.fy = null;
-                    }
-
-                    function resizeGraph() {
-                        const size = currentSize();
-                        width = size.width;
-                        height = size.height;
-                        svg.attr("viewBox", `0 0 ${width} ${height}`);
-                        simulation.force("center", d3.forceCenter(width / 2, height / 2));
-                        simulation.alpha(0.5).restart();
-                        fitToView(); // immediate rough fit; "end" refines it once settled
-                    }
-                    window.resizeDependencyGraph = resizeGraph;
-
-                    const fullscreenBtn = document.getElementById('depGraphFullscreenBtn');
-                    fullscreenBtn.addEventListener('click', () => {
-                        const isFullscreen = graphContainer.classList.toggle('is-fullscreen');
-                        fullscreenBtn.textContent = isFullscreen ? '⤫ Exit fullscreen' : '⛶ Fullscreen';
-                        document.body.style.overflow = isFullscreen ? 'hidden' : '';
-                        // Wait for the layout/size transition to settle before re-centering
-                        setTimeout(resizeGraph, 50);
-                    });
-
-                    document.addEventListener('keydown', (e) => {
-                        if (e.key === 'Escape' && graphContainer.classList.contains('is-fullscreen')) {
-                            graphContainer.classList.remove('is-fullscreen');
-                            fullscreenBtn.textContent = '⛶ Fullscreen';
-                            document.body.style.overflow = '';
-                            setTimeout(resizeGraph, 50);
-                        }
-                    });
-
-                    window.addEventListener('resize', resizeGraph);
-                }
-
-                // Tab switching -- resize charts/graph on first activation since
-                // Chart.js and the D3 graph both size incorrectly if constructed
-                // while their container is display:none.
-                (function () {
-                    const tabButtons = document.querySelectorAll('.tab-btn');
-                    const panels = {
-                        list: document.getElementById('tab-panel-list'),
-                        map: document.getElementById('tab-panel-map'),
-                        analytics: document.getElementById('tab-panel-analytics'),
-                    };
-                    const activatedOnce = { map: false, analytics: false };
-
-                    function activateTab(name) {
-                        // Leaving the map tab mid-fullscreen would orphan the fixed
-                        // overlay under a display:none ancestor and leave the body
-                        // scroll-lock stuck -- exit fullscreen first via its own handler.
-                        if (name !== 'map' && panels.map && !panels.map.hidden) {
-                            const gc = document.getElementById('dependencyGraphContainer');
-                            if (gc && gc.classList.contains('is-fullscreen')) {
-                                document.getElementById('depGraphFullscreenBtn').click();
-                            }
-                        }
-
-                        tabButtons.forEach(btn => {
-                            const active = btn.dataset.tab === name;
-                            btn.classList.toggle('is-active', active);
-                            btn.setAttribute('aria-selected', String(active));
-                        });
-                        Object.entries(panels).forEach(([key, panel]) => {
-                            if (panel) panel.hidden = key !== name;
-                        });
-
-                        if (name === 'analytics' && !activatedOnce.analytics) {
-                            activatedOnce.analytics = true;
-                            Object.values(window.cveCharts || {}).forEach(c => c && c.resize());
-                        }
-                        if (name === 'map' && !activatedOnce.map && typeof window.resizeDependencyGraph === 'function') {
-                            activatedOnce.map = true;
-                            window.resizeDependencyGraph();
-                        }
-                    }
-
-                    tabButtons.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
-                })();
+        // Per-column search. A header search box must not also sort its column
+        // (DataTables sorts on a click/keypress anywhere in the header cell).
+        table.columns().every(function (idx) {
+          $('input', this.header())
+            .on('click keypress', e => e.stopPropagation())
+            .on('keyup change input', function () {
+              // Blurring the box fires "change" right after the last keyup already
+              // applied this search; redrawing again shifts the layout mid-click
+              // and swallows the click (e.g. on a row's Details button).
+              if (table.column(idx).search() !== this.value) {
+                table.column(idx).search(this.value).draw();
+              }
             });
-            {% endif %}
+        });
+        // Enable Ctrl+A in search inputs
+        $('input.dt-search').on('keydown', function (e) {
+          if (e.ctrlKey && e.keyCode === 65) {
+            e.stopPropagation();
+            this.select();
+            return true;
+          }
+        });
 
-
-            // DataTable initialization
-            $(document).ready(function () {
-                let table = $("#cve_table").DataTable({
-                    paging: true,
-                    searching: true,
-                    info: true,
-                    order: [[0, "desc"]],
-                    lengthMenu: [10, 25, 50, 100],
-                    scrollX: true,
-                    searchHighlight: false,
-                    pageLength: 25,
-                    columnDefs: [
-                        { targets: [2, 3], className: "text-center" },
-                    ]
-                });
-
-
-                // Per-column search
-                table.columns().every(function(idx) {
-                    $('input', this.header()).on('keyup change', function() {
-                        // Blurring the box fires "change" right after the last keyup already
-                        // applied this search; redrawing again shifts the layout mid-click
-                        // and swallows the click (e.g. on a row's Details button).
-                        if (table.column(idx).search() !== this.value) {
-                            table.column(idx).search(this.value).draw();
-                        }
-                    });
-                });
-
-
-                // Manual highlighting
-                table.on('draw', function () {
-                    const body = $(table.table().body());
-                    const markInstance = new Mark(body[0]);
-
-
-                    markInstance.unmark({
-                        done: function () {
-                            const globalSearch = table.search();
-                            if (globalSearch) {
-                                markInstance.mark(globalSearch);
-                            }
-
-
-                            table.columns().every(function () {
-                                const colSearch = this.search();
-                                if (colSearch) {
-                                    const colIndex = this.index() + 1;
-                                    body.find('td:nth-child(' + colIndex + ')').each(function () {
-                                        markInstance.mark(colSearch, {
-                                            element: 'mark',
-                                            separateWordSearch: false,
-                                            acrossElements: true
-                                        }, this);
-                                    });
-                                }
-                            });
-                        }
-                    });
-                });
-
-
-                // Enable Ctrl+A in search inputs
-                $('input.dt-search').on('keydown', function(e) {
-                    if (e.ctrlKey && e.keyCode === 65) {
-                        e.stopPropagation();
-                        this.select();
-                        return true;
-                    }
-                });
-                $('input.dt-search').attr('tabindex', '0');
-
-
-                // Version-match filter (only rendered when a version was searched)
-                $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
-                    if (settings.nTable.id !== 'cve_table') return true;
-                    const mode = $('#versionMatchFilter').val();
-                    if (!mode || mode === 'all') return true;
-                    const tr = settings.aoData[dataIndex].nTr;
-                    return !!tr && tr.dataset.vm === mode;
-                });
-                $('#versionMatchFilter').on('change', function () { table.draw(); });
-
-                // Expandable CVE details -- fetched on demand from the finished scan
-                $('#cve_table tbody').on('click', '.details-btn', function () {
-                    const btn = $(this);
-                    const row = table.row(btn.closest('tr'));
-                    if (row.child.isShown()) {
-                        row.child.hide();
-                        btn.text('▸ Details');
-                        return;
-                    }
-                    btn.text('▾ Details');
-                    row.child('<div class="cve-details-loading">Loading details...</div>').show();
-                    fetch(`/api/job/${encodeURIComponent(jobId)}/cve/${encodeURIComponent(btn.data('cve'))}`)
-                        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-                        .then(d => row.child(renderCveDetails(d)).show())
-                        .catch(err => row.child(
-                            '<div class="cve-details-loading">Could not load details (' + esc(err.message) + ').</div>'
-                        ).show());
-                });
-
-                // Search: run the scan in the background and show live progress
-                $('#searchForm').on('submit', function (e) {
-                    e.preventDefault();
-                    const form = this;
-                    const btn = $(form).find('button[type="submit"]');
-                    const started = Date.now();
-                    const timer = setInterval(() => {
-                        $('#scanProgressTime').text(Math.round((Date.now() - started) / 1000) + 's');
-                    }, 1000);
-
-                    function setProgress(message, fraction) {
-                        $('#scanProgressMsg').text(message);
-                        $('#scanProgressFill').css('width', Math.round(Math.max(0.02, fraction) * 100) + '%');
-                    }
-                    function fail(message) {
-                        clearInterval(timer);
-                        $('#scanProgress').prop('hidden', true);
-                        $('#scanError').text(message).prop('hidden', false);
-                        btn.text('Search').prop('disabled', false);
-                    }
-                    function poll(id) {
-                        fetch(`/api/scan/${encodeURIComponent(id)}`)
-                            .then(r => r.json())
-                            .then(s => {
-                                if (s.status === 'done') {
-                                    clearInterval(timer);
-                                    setProgress('Loading results...', 1);
-                                    window.location.href = '/?job=' + encodeURIComponent(id);
-                                } else if (s.status === 'error') {
-                                    fail(s.error || s.message || 'The search failed.');
-                                } else {
-                                    setProgress(s.message, s.progress);
-                                    setTimeout(() => poll(id), 700);
-                                }
-                            })
-                            .catch(err => fail('Lost contact with the app: ' + err.message));
-                    }
-
-                    btn.html('🔍 Searching...').prop('disabled', true);
-                    $('#scanError').prop('hidden', true);
-                    $('#scanProgress').prop('hidden', false);
-                    setProgress('Starting...', 0.02);
-
-                    fetch('/api/scan', { method: 'POST', body: new URLSearchParams(new FormData(form)) })
-                        .then(r => r.json().then(d => ({ ok: r.ok, d })))
-                        .then(({ ok, d }) => {
-                            if (!ok) throw new Error(d.message || 'Could not start the search.');
-                            poll(d.job_id);
-                        })
-                        .catch(err => fail(err.message));
-                });
-            });
-
-            // HTML-escape text from NVD before putting it in the details panel
-            function esc(value) {
-                return String(value ?? '').replace(/[&<>"']/g, c => (
-                    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-            }
-            function safeUrl(url) {
-                return /^https?:\/\//i.test(url) ? url : '#';
-            }
-
-            function renderCveDetails(d) {
-                const cvss = d.cvss || {};
-                const cards = [];
-
-                // Weakness
-                const cwes = (d.cwes || []).map(c => {
-                    const m = /^CWE-(\d+)$/.exec(c.id);
-                    const id = m
-                        ? `<a href="https://cwe.mitre.org/data/definitions/${m[1]}.html" target="_blank" rel="noopener">${esc(c.id)}</a>`
-                        : esc(c.id);
-                    return `<p>${id}${c.name ? ' &mdash; ' + esc(c.name) : ''}</p>`;
-                }).join('');
-                cards.push(`<div class="cve-card"><h4>Weakness</h4>${cwes || '<p class="cve-muted">No CWE assigned</p>'}</div>`);
-
-                // CVSS breakdown
-                let cvssBody = '<p class="cve-muted">No CVSS data</p>';
-                if (cvss.vector) {
-                    const chips = (cvss.breakdown || []).map(b =>
-                        `<span class="cve-chip">${esc(b.label)}: <strong>${esc(b.value)}</strong></span>`).join('');
-                    const subs = [];
-                    if (cvss.exploitability != null) subs.push(`Exploitability ${esc(cvss.exploitability)}`);
-                    if (cvss.impact != null) subs.push(`Impact ${esc(cvss.impact)}`);
-                    cvssBody = `<p><code>${esc(cvss.vector)}</code></p>` +
-                        `<p class="cve-muted">CVSS ${esc(cvss.version)}${cvss.source ? ' &middot; ' + esc(cvss.source) : ''}` +
-                        `${subs.length ? ' &middot; ' + subs.join(' &middot; ') : ''}</p>` +
-                        `<div class="cve-chips">${chips}</div>`;
+        // Manual highlighting of search matches
+        table.on('draw', function () {
+          const body = $(table.table().body());
+          const markInstance = new Mark(body[0]);
+          markInstance.unmark({
+            done: function () {
+              const globalSearch = table.search();
+              if (globalSearch) markInstance.mark(globalSearch);
+              table.columns().every(function () {
+                const colSearch = this.search();
+                if (colSearch) {
+                  const colIndex = this.index() + 1;
+                  body.find('td:nth-child(' + colIndex + ')').each(function () {
+                    markInstance.mark(colSearch, {
+                      element: 'mark',
+                      separateWordSearch: false,
+                      acrossElements: true
+                    }, this);
+                  });
                 }
-                cards.push(`<div class="cve-card"><h4>CVSS vector</h4>${cvssBody}</div>`);
-
-                // CISA KEV
-                if (d.kev) {
-                    const ransomware = d.kev.ransomware === 'Known';
-                    cards.push(`<div class="cve-card"><h4>CISA known exploited</h4>` +
-                        (d.kev.name ? `<p><strong>${esc(d.kev.name)}</strong></p>` : '') +
-                        `<p>Added to catalog: <strong>${esc(d.kev.date_added || 'n/a')}</strong></p>` +
-                        `<p>Remediation due: <strong>${esc(d.kev.due_date || 'n/a')}</strong></p>` +
-                        `<p>Ransomware campaigns: <span class="cve-chip${ransomware ? ' cve-chip-danger' : ''}">${esc(d.kev.ransomware || 'Unknown')}</span></p>` +
-                        (d.kev.required_action ? `<p class="cve-muted">${esc(d.kev.required_action)}</p>` : '') +
-                        `</div>`);
-                }
-
-                // Version match
-                if (d.version_match) {
-                    const labels = { 'Affected': 'Confirmed affected', 'Unverified': 'Unverified' };
-                    cards.push(`<div class="cve-card"><h4>Version match</h4>` +
-                        `<p><strong>${esc(labels[d.version_match.status] || d.version_match.status)}</strong></p>` +
-                        (d.version_match.detail ? `<p class="cve-muted">${esc(d.version_match.detail)}</p>` : '') +
-                        `</div>`);
-                }
-
-                // Record info
-                const day = s => esc((s || '').slice(0, 10) || 'n/a');
-                cards.push(`<div class="cve-card"><h4>NVD record</h4>` +
-                    `<p>Published: <strong>${day(d.published)}</strong></p>` +
-                    `<p>Last modified: <strong>${day(d.last_modified)}</strong></p>` +
-                    `<p>Status: <strong>${esc(d.nvd_status || 'n/a')}</strong></p>` +
-                    `<p>Affected configurations: <strong>${esc(d.affected_count)}</strong></p></div>`);
-
-                // References grouped by tag
-                const groups = (d.references || []).map((g, i) => {
-                    const links = g.links.map(l =>
-                        `<li><a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.url)}</a>` +
-                        `${l.tags.length ? ' <span class="cve-muted">(' + esc(l.tags.join(', ')) + ')</span>' : ''}</li>`).join('');
-                    // Open the most actionable groups by default
-                    const open = (g.tag === 'Patch' || g.tag === 'Exploit' || g.tag === 'Vendor Advisory') ? ' open' : '';
-                    return `<details class="cve-ref-group"${open}><summary>${esc(g.tag)} (${g.links.length})</summary>` +
-                        `<ul class="cve-ref-list">${links}</ul></details>`;
-                }).join('');
-
-                return `<div class="cve-details">` +
-                    `<p class="cve-desc">${esc(d.description)}</p>` +
-                    `<div class="cve-details-grid">${cards.join('')}</div>` +
-                    `<div class="cve-refs"><h4 class="cve-muted" style="font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:.4rem">References</h4>` +
-                    `${groups || '<p class="cve-muted">No references</p>'}</div></div>`;
+              });
             }
+          });
+        });
+
+        // Version-match filter (only shown when a version was searched). Reads the row
+        // data, not the <tr>: rows outside the current page have no <tr> yet.
+        $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+          if (settings.nTable.id !== 'cve_table') return true;
+          const mode = $('#versionMatchFilter').val();
+          if (!mode || mode === 'all') return true;
+          return settings.aoData[dataIndex]._aData.vm === mode;
+        });
+        $('#versionMatchFilter').on('change', () => table.draw());
+
+        // Expandable CVE details -- fetched on demand
+        $('#cve_table tbody').on('click', '.details-btn', function () {
+          const btn = $(this);
+          const row = table.row(btn.closest('tr'));
+          const data = row.data();
+          if (row.child.isShown()) {
+            row.child.hide();
+            data._open = false;
+            btn.text('▸ Details');
+            return;
+          }
+          data._open = true;
+          btn.text('▾ Details');
+          row.child('<div class="cve-details-loading">Loading details...</div>').show();
+          fetch(`/api/job/${encodeURIComponent(state.jobId)}/cve/${encodeURIComponent(btn.data('cve'))}`)
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+            .then(d => row.child(renderCveDetails(d)).show())
+            .catch(err => row.child(
+              '<div class="cve-details-loading">Could not load details (' + esc(err.message) + ').</div>'
+            ).show());
+        });
+
+        // Full page: the whole table card fills the window; header stays pinned
+        bindFullscreen(document.getElementById('tableCard'), document.getElementById('tableFullscreenBtn'), {
+          labels: [ICON.max + ' Full page', ICON.min + ' Exit full page'],
+          onChange: () => table.columns.adjust(),
+        });
+      }
+
+      function revealResults() {
+        const el = document.getElementById('results');
+        if (!el.hidden) return;
+        el.hidden = false;
+        if (state.table) state.table.columns.adjust();
+      }
+
+      function addRows(batch) {
+        revealResults();  // reveal first: DataTables can't size its columns inside a hidden container
+        if (!state.table) initTable();
+        state.table.rows.add(batch).draw(false);
+      }
+
+      // Merge EPSS scores / KEV flags into rows already on screen
+      function applyEnrichment(e, final) {
+        const kev = new Set(e.kev);
+        state.table.rows().every(function () {
+          const d = this.data();
+          let changed = false;
+          const score = e.epss[d.cve];
+          if (score && (d.epss !== score[0] || d.epss_pct !== score[1])) {
+            d.epss = score[0];
+            d.epss_pct = score[1];
+            changed = true;
+          }
+          if (kev.has(d.cve) && !d.kev) {
+            d.kev = true;
+            changed = true;
+          }
+          if (changed && !final) this.invalidate('data');
+        });
+        if (final) {
+          // The EPSS stage is over: rows that never got a score stop showing a placeholder
+          state.epssPending = false;
+          state.table.rows().invalidate('data');
+        }
+        state.table.draw(false);
+      }
+
+      /* ================= loading a scan, progressively ================= */
+      function resetResults() {
+        state.run++;  // any poll still in flight belongs to the old scan
+        stopTimer();
+        exitFullscreen();
+        Object.assign(state, {
+          status: null, loaded: 0, enrichSeen: 0, lastEnrich: 0, version: '', product: '',
+          formFilled: false, noticeKey: '', epssPending: true, done: false, failed: false,
+          analytics: null, analyticsBuilt: false, graphBuilt: false,
+        });
+        Object.keys(charts).forEach(k => { charts[k].destroy(); delete charts[k]; });
+        if (state.graph) state.graph.destroy();
+        state.graph = null;
+        if (state.table) {
+          state.table.search('');
+          state.table.columns().search('');
+          state.table.clear().draw();
+          $('#cve_table thead input.dt-search').val('');
+          $('#versionMatchFilter').val('all');
+        }
+        $('#results').prop('hidden', true);
+        $('#notices').empty();
+        buildTiles();
+        $('#priorityList, #kevSpotlight').empty();
+        $('.chart-canvas-wrap .empty-note').remove();
+        $('.chart-canvas-wrap canvas').prop('hidden', false);
+        $('.chart-canvas-wrap').css('display', '');
+        $('#analyticsContent, #mapContent').prop('hidden', true);
+        $('#analyticsPending, #mapPending').prop('hidden', false);
+        $('#analyticsPendingMsg').text('Charts appear when the scan finishes -- EPSS and KEV data are still loading.');
+        $('#mapPending').text('The map is built when the scan finishes -- EPSS and KEV data are still loading.');
+        $('#btnCsv, #btnExcel').prop('disabled', true);
+        $('#scanError').prop('hidden', true);
+        activateTab('list');
+      }
+
+      function attachJob(id) {
+        state.jobId = id;
+        const run = ++state.run;
+        history.replaceState(null, '', '/?job=' + encodeURIComponent(id));
+        setSearching(true);
+        $('#scanProgress').prop('hidden', false);
+        startTimer();
+        pollLoop(run);
+      }
+
+      function applyStatus(s) {
+        state.version = s.version || '';
+        state.product = s.product || '';
+        if (!state.formFilled) {  // re-attaching after a reload: show what was searched
+          $('#searchForm [name="product_name"]').val(s.product);
+          $('#searchForm [name="version"]').val(s.version);
+          state.formFilled = true;
+        }
+        setProgress(s.message, s.progress);
+        renderNotices(s);
+        $('#versionFilterWrap').prop('hidden', !s.version);
+      }
+
+      // Fetch any rows that have appeared since the last call (append-only on the server)
+      async function syncRows(run) {
+        while (run === state.run && state.loaded < (state.status.rows || 0)) {
+          const d = await getJSON(`/api/job/${encodeURIComponent(state.jobId)}/rows?offset=${state.loaded}`);
+          if (run !== state.run) return;
+          if (!d.rows.length) break;
+          addRows(d.rows);
+          state.loaded = d.next;
+        }
+      }
+
+      async function syncEnrichment(run, final) {
+        const e = await getJSON(`/api/job/${encodeURIComponent(state.jobId)}/enrichment`);
+        if (run !== state.run || !state.table) return;
+        state.enrichSeen = e.version;
+        state.lastEnrich = Date.now();
+        applyEnrichment(e, final);
+      }
+
+      async function pollLoop(run) {
+        while (run === state.run) {
+          let s;
+          try {
+            s = await getJSON(`/api/scan/${encodeURIComponent(state.jobId)}`);
+          } catch (err) {
+            if (run === state.run) {
+              failScan(err.status === 404
+                ? 'Those results are no longer available. Run the search again.'
+                : 'Lost contact with the app: ' + err.message);
+            }
+            return;
+          }
+          if (run !== state.run) return;
+          state.status = s;
+          applyStatus(s);
+
+          try {
+            await syncRows(run);
+            if (run !== state.run) return;
+            if (state.table) {
+              const epssFinished = s.stage === 'analytics' || s.stage === 'done';
+              const fresh = s.enrich_version !== state.enrichSeen;
+              // While EPSS streams in, refresh at most every ~2s; once it's over, always
+              if ((fresh && (epssFinished || Date.now() - state.lastEnrich > 2000)) || (epssFinished && state.epssPending)) {
+                await syncEnrichment(run, epssFinished);
+              }
+            }
+          } catch (err) {
+            if (run === state.run) failScan('Could not load results: ' + err.message);
+            return;
+          }
+          if (run !== state.run) return;
+
+          if (s.status === 'error') {
+            updateTiles();
+            failScan(s.error || s.message || 'The search failed.');
+            return;
+          }
+          if (s.status === 'done') {
+            await finishScan(run);
+            return;
+          }
+          updateTiles();
+          await sleep(700);
+        }
+      }
+
+      async function finishScan(run) {
+        stopTimer();
+        state.done = true;
+        state.status.stage = 'done';
+        try {
+          state.analytics = await getJSON(`/api/job/${encodeURIComponent(state.jobId)}/analytics`);
+        } catch (err) {
+          $('#analyticsPendingMsg').text('Could not load the charts: ' + err.message);
+          $('#mapPending').text('Could not load the map: ' + err.message);
+        }
+        if (run !== state.run) return;
+        $('#scanProgress').prop('hidden', true);
+        setSearching(false);
+        $('#btnCsv, #btnExcel').prop('disabled', false).removeAttr('title');
+        if (!state.table) {  // the search matched nothing: still show the (empty) results view
+          revealResults();
+          initTable();
+        }
+        updateTiles();
+        const tab = currentTab();
+        if (tab === 'analytics') ensureAnalytics();
+        if (tab === 'map') ensureGraph();
+      }
+
+      /* ================= result tabs (charts and graph are built on first view) ================= */
+      const currentTab = () => (document.querySelector('.tab-btn.is-active[data-tab]') || {}).dataset?.tab || 'list';
+
+      function activateTab(name) {
+        exitFullscreen();
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+          const active = btn.dataset.tab === name;
+          btn.classList.toggle('is-active', active);
+          btn.setAttribute('aria-selected', String(active));
+        });
+        ['list', 'map', 'analytics'].forEach(key => {
+          const panel = document.getElementById('tab-panel-' + key);
+          if (panel) panel.hidden = key !== name;
+        });
+        if (name === 'list' && state.table) state.table.columns.adjust();
+        if (name === 'analytics') ensureAnalytics();
+        if (name === 'map') ensureGraph();
+      }
+
+      function ensureAnalytics() {
+        if (!state.analytics || state.analyticsBuilt) return;
+        state.analyticsBuilt = true;
+        $('#analyticsPending').prop('hidden', true);
+        $('#analyticsContent').prop('hidden', false);
+        buildAnalytics(state.analytics);
+      }
+
+      function ensureGraph() {
+        if (!state.analytics || state.graphBuilt) return;
+        state.graphBuilt = true;
+        const data = state.analytics.dependency_graph;
+        if (!data || !data.nodes || !data.nodes.length) {
+          $('#mapPending').text('No product or version data to draw for these CVEs.').prop('hidden', false);
+          return;
+        }
+        $('#mapPending').prop('hidden', true);
+        $('#mapContent').prop('hidden', false);
+        const note = document.getElementById('depGraphLimitNote');
+        note.hidden = !(state.loaded > GRAPH_LIMIT);
+        note.textContent = `Built from the ${GRAPH_LIMIT} highest-risk CVEs of ${fmtInt(state.loaded)} to keep the map readable.`;
+        state.graph = buildGraph(data);
+      }
+
+      /* ================= analytics ================= */
+      function chartTheme() {
+        const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        return { text: dark ? '#d1d5db' : '#374151', grid: dark ? '#374151' : '#e5e7eb' };
+      }
+      // Charts built later (first time the Analytics tab is opened) must start out themed
+      function applyChartDefaults() {
+        const t = chartTheme();
+        Chart.defaults.color = t.text;
+        Chart.defaults.borderColor = t.grid;
+      }
+
+      const surfaceColor = () => getComputedStyle(document.documentElement).getPropertyValue('--chart-bg-dm').trim() || '#fff';
+
+      function makeChart(key, canvasId, config) {
+        if (charts[key]) charts[key].destroy();
+        charts[key] = new Chart(document.getElementById(canvasId).getContext('2d'), config);
+      }
+      function emptyChart(canvasId) {
+        const canvas = document.getElementById(canvasId);
+        canvas.hidden = true;
+        canvas.parentElement.style.display = 'flex';
+        canvas.parentElement.insertAdjacentHTML('beforeend', '<p class="empty-note">No data</p>');
+      }
+      const truncate = (text, n) => (text.length > n ? text.slice(0, n - 1) + '…' : text);
+      const topEntries = (obj, n) => Object.entries(obj || {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+
+      // One-series bar chart (horizontal by default). `titles` are the full labels for tooltips.
+      function barConfig({ labels, data, color, horizontal = true, titles }) {
+        const valueAxis = { beginAtZero: true, title: { display: true, text: 'CVEs' }, ticks: { font: { size: 10 }, precision: 0 } };
+        const labelAxis = { ticks: { font: { size: 10 } } };
+        return {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'CVEs', data, backgroundColor: color, borderRadius: 4,
+              maxBarThickness: 24, barPercentage: 0.7, categoryPercentage: 0.8,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: horizontal ? 'y' : 'x',
+            scales: horizontal ? { x: valueAxis, y: labelAxis } : { y: valueAxis, x: labelAxis },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { title: items => (titles ? titles[items[0].dataIndex] : items[0].label) } },
+            },
+          },
+        };
+      }
+
+      function renderPriority(list) {
+        if (!list.length) return '<p class="empty-note">No CVEs.</p>';
+        const rows = list.map((r, i) => `
+          <tr>
+            <td class="priority-rank">${i + 1}</td>
+            <td><a href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(r.cve)}" class="text-blue-700 hover:underline font-semibold" target="_blank" rel="noopener">${esc(r.cve)}</a></td>
+            <td>${riskBadges(r.kev, r.severity, ' ')}</td>
+            <td class="font-mono">${typeof r.score === 'number' ? r.score.toFixed(1) : 'N/A'}</td>
+            <td><span class="mini-bar"><i style="width:${Math.max(2, r.epss * 100)}%; background:${epssColor(r.epss)}"></i></span><span class="font-mono">${r.epss.toFixed(3)}</span></td>
+            <td>${r.patch ? '✔ Yes' : '— None'}</td>
+          </tr>`).join('');
+        return `<table class="priority-table"><thead><tr><th>#</th><th>CVE</th><th>Risk</th><th>CVSS</th><th>EPSS</th><th>Patch ref.</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      function renderKevSpotlight(k) {
+        if (!k || !k.total) {
+          return `<p class="empty-note">None of these CVEs are in CISA's Known Exploited Vulnerabilities catalog.</p>`;
+        }
+        const recent = (k.recent || []).map(r => `
+          <li><span><a href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(r.cve)}" class="text-blue-700 hover:underline" target="_blank" rel="noopener">${esc(r.cve)}</a>${r.name ? ' -- ' + esc(truncate(r.name, 40)) : ''}</span>
+          <span class="text-gray-500">${esc(r.date_added)}</span></li>`).join('');
+        return `<div class="kev-stats">
+            <div class="kev-stat"><b>${fmtInt(k.total)}</b><span>in the KEV catalog</span></div>
+            <div class="kev-stat"><b>${fmtInt(k.ransomware)}</b><span>used in ransomware campaigns</span></div>
+          </div>` + (recent ? `<div class="kev-recent-title">Recently added</div><ul class="kev-recent">${recent}</ul>` : '');
+      }
+
+      function buildAnalytics(a) {
+        applyChartDefaults();
+        const legendOpts = { labels: { boxWidth: 12, font: { size: 10 } } };
+
+        $('#priorityList').html(renderPriority(a.top_priority || []));
+        $('#kevSpotlight').html(renderKevSpotlight(a.kev_summary));
+
+        // Risk distribution (mutually exclusive slices: KEV wins over EPSS)
+        const rd = a.risk_distribution || {};
+        makeChart('risk', 'riskChart', {
+          type: 'doughnut',
+          data: {
+            labels: ['KEV', 'High EPSS (≥0.7, not KEV)', 'Medium EPSS (0.3-0.7)', 'Low EPSS (<0.3)'],
+            datasets: [{
+              data: [rd.kev_count || 0, rd.high_epss || 0, rd.medium_epss || 0, rd.low_epss || 0],
+              backgroundColor: ['#d03b3b', '#ec835a', '#fab219', '#0ca30c'],
+              borderColor: surfaceColor(),
+              borderWidth: 2,
+            }],
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', ...legendOpts } } },
+        });
+
+        // Severity breakdown -- fixed status palette
+        const sev = a.severity_distribution || {};
+        const sevRows = [['CRITICAL', 'Critical', '#d03b3b'], ['HIGH', 'High', '#ec835a'], ['MEDIUM', 'Medium', '#fab219'],
+          ['LOW', 'Low', '#0ca30c'], ['N/A', 'N/A', '#898781']].filter(r => sev[r[0]]);
+        if (sevRows.length) {
+          makeChart('severity', 'severityChart', barConfig({
+            labels: sevRows.map(r => r[1]), data: sevRows.map(r => sev[r[0]]), color: sevRows.map(r => r[2]),
+          }));
+        } else emptyChart('severityChart');
+
+        // EPSS vs CVSS scatter
+        const scatter = a.epss_cvss_data || [];
+        makeChart('correlation', 'correlationChart', {
+          type: 'scatter',
+          data: {
+            datasets: [
+              { label: 'KEV', data: scatter.filter(d => d.kev), backgroundColor: '#d03b3b', pointRadius: 4, pointHitRadius: 14 },
+              { label: 'Non-KEV', data: scatter.filter(d => !d.kev), backgroundColor: '#0ca30c', pointRadius: 3, pointHitRadius: 14 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { title: { display: true, text: 'CVSS Score' }, min: 0, max: 10, ticks: { font: { size: 10 } } },
+              y: { title: { display: true, text: 'EPSS Score' }, min: 0, max: 1, ticks: { font: { size: 10 } } },
+            },
+            plugins: { legend: legendOpts },
+          },
+        });
+
+        // Attack vector
+        const vectors = a.attack_vector || [];
+        if (vectors.length) {
+          makeChart('vector', 'vectorChart', barConfig({
+            labels: vectors.map(v => v.label), data: vectors.map(v => v.count), color: '#2a78d6',
+          }));
+        } else emptyChart('vectorChart');
+
+        // Trends by year
+        const years = Object.keys(a.year_trends || {}).sort();
+        if (years.length) {
+          makeChart('trends', 'trendsChart', {
+            type: 'line',
+            data: {
+              labels: years,
+              datasets: [{
+                label: 'CVE Count', data: years.map(y => a.year_trends[y]),
+                borderColor: '#2a78d6', backgroundColor: 'rgba(42, 120, 214, 0.1)',
+                borderWidth: 2, borderCapStyle: 'round', tension: 0.1, fill: true, pointRadius: 3,
+              }],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'CVEs' }, ticks: { font: { size: 10 } } },
+                x: { title: { display: true, text: 'Year' }, ticks: { font: { size: 10 } } },
+              },
+              plugins: { legend: { display: false } },
+            },
+          });
+        } else emptyChart('trendsChart');
+
+        // Top vendors
+        const vendors = topEntries(a.vendor_analysis, 8);
+        if (vendors.length) {
+          makeChart('vendor', 'vendorChart', barConfig({
+            labels: vendors.map(v => v[0]), data: vendors.map(v => v[1]), color: '#2a78d6',
+          }));
+        } else emptyChart('vendorChart');
+
+        // Most vulnerable versions
+        const versions = topEntries(a.top_vulnerable_versions, 8);
+        if (versions.length) {
+          makeChart('version', 'versionChart', barConfig({
+            labels: versions.map(v => truncate(v[0], 16)), data: versions.map(v => v[1]), color: '#2a78d6',
+            horizontal: false, titles: versions.map(v => v[0]),
+          }));
+        } else emptyChart('versionChart');
+
+        // Top weakness types
+        const cwes = a.cwe_distribution || [];
+        if (cwes.length) {
+          const full = cwes.map(c => c.id + (c.name ? ' · ' + c.name : ''));
+          makeChart('cwe', 'cweChart', barConfig({
+            labels: full.map(t => truncate(t, 34)), data: cwes.map(c => c.count), color: '#2a78d6', titles: full,
+          }));
+        } else emptyChart('cweChart');
+
+        // Patch reference meter
+        const patch = a.patch_status || { patched: 0, unpatched: 0 };
+        const patchTotal = patch.patched + patch.unpatched;
+        const patchPct = patchTotal ? Math.round((patch.patched / patchTotal) * 100) : 0;
+        document.getElementById('patchMeterPct').textContent = patchPct + '%';
+        document.getElementById('patchMeterFill').style.width = patchPct + '%';
+        document.getElementById('patchMeterCounts').textContent = `${fmtInt(patch.patched)} of ${fmtInt(patchTotal)} CVEs`;
+
+        // Charts start with the current theme; later toggles go through DarkModeToggle
+        if (window.darkModeToggle) window.darkModeToggle.updateChartColors(document.documentElement.getAttribute('data-theme'));
+      }
+
+      /* ================= Product -> Version map (D3 force graph) ================= */
+      function buildGraph(dependencyData) {
+        const svgEl = document.getElementById('dependency-svg');
+        const svg = d3.select(svgEl);
+        svg.selectAll('*').remove();
+        const zoomLayer = svg.append('g').attr('class', 'zoom-layer');
+        const tooltip = d3.select('body').append('div').attr('class', 'tooltip').style('opacity', 0);
+
+        function currentSize() {
+          const rect = svgEl.getBoundingClientRect();
+          return { width: rect.width || 800, height: rect.height || 500 };
+        }
+        let { width, height } = currentSize();
+        svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+        // Hub nodes with many versions need proportionally more room, or
+        // labels/nodes crowd into an unreadable cluster near the center.
+        const isDense = dependencyData.nodes.length > 25;
+        const linkDistance = Math.min(200, 70 + dependencyData.nodes.length * 2.5);
+        document.getElementById('depGraphDensityHint').hidden = !isDense;
+
+        const simulation = d3.forceSimulation(dependencyData.nodes)
+          .force('link', d3.forceLink(dependencyData.links).id(d => d.id).distance(linkDistance))
+          .force('charge', d3.forceManyBody().strength(-260))
+          .force('center', d3.forceCenter(width / 2, height / 2))
+          .force('collision', d3.forceCollide().radius(28));
+
+        const link = zoomLayer.append('g')
+          .selectAll('line')
+          .data(dependencyData.links)
+          .enter().append('line')
+          .attr('class', 'link');
+
+        function dragstarted(event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        }
+        function dragged(event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        }
+        function dragended(event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        }
+
+        const node = zoomLayer.append('g')
+          .selectAll('circle')
+          .data(dependencyData.nodes)
+          .enter().append('circle')
+          .attr('r', d => (d.type === 'product' ? 12 : 8))
+          .attr('class', d => {
+            let baseClass = `node-${d.type}`;
+            if (d.severity === 'CRITICAL') baseClass += ' node-critical';
+            else if (d.severity === 'HIGH') baseClass += ' node-high';
+            return baseClass;
+          })
+          .on('mouseover', function (event, d) {
+            let tooltipText = esc(d.id);
+            if (d.type === 'version' && d.cve_id) {
+              tooltipText += `<br/>CVE: ${esc(d.cve_id)}<br/>Severity: ${esc(d.severity)}`;
+              if (d.epss_score) tooltipText += `<br/>EPSS: ${d.epss_score.toFixed(3)}`;
+              if (d.patch_reference_found) tooltipText += `<br/>Patch ref. in NVD`;
+            } else if (d.type === 'product' && d.cve_count) {
+              tooltipText += `<br/>CVEs: ${d.cve_count}`;
+            }
+            tooltip.transition().duration(200).style('opacity', 0.9);
+            tooltip.html(tooltipText)
+              .style('left', (event.pageX + 10) + 'px')
+              .style('top', (event.pageY - 28) + 'px');
+          })
+          .on('mouseout', function () {
+            tooltip.transition().duration(500).style('opacity', 0);
+          })
+          .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended));
+
+        // Labels: full product name / version string (ellipsis past ~13 chars),
+        // relying on the tooltip above for the rest of the detail. When the
+        // graph is dense, only product labels render -- version labels alone
+        // would overlap into an unreadable cluster, so those rely on hover.
+        const text = zoomLayer.append('g')
+          .selectAll('text')
+          .data(isDense ? dependencyData.nodes.filter(d => d.type === 'product') : dependencyData.nodes)
+          .enter().append('text')
+          .attr('class', 'node-text')
+          .text(d => {
+            const parts = d.id.split(':');
+            const label = parts[parts.length - 1];
+            return label.length > 13 ? label.substring(0, 12) + '…' : label;
+          });
+
+        // Zoom/pan so dense graphs stay usable
+        const zoomBehavior = d3.zoom()
+          .scaleExtent([0.3, 4])
+          .on('zoom', (event) => zoomLayer.attr('transform', event.transform));
+        svg.call(zoomBehavior);
+
+        // A hub with many spokes can lay out larger than the visible box --
+        // auto-fit the content once positions settle, instead of leaving it
+        // stuck at 1:1 zoom where most/all nodes render off-screen.
+        function fitToView() {
+          const xs = dependencyData.nodes.map(d => d.x).filter(Number.isFinite);
+          const ys = dependencyData.nodes.map(d => d.y).filter(Number.isFinite);
+          if (!xs.length) return;
+          const pad = 40;
+          const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
+          const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+          const contentW = Math.max(1, maxX - minX);
+          const contentH = Math.max(1, maxY - minY);
+          const scale = Math.max(0.3, Math.min(1.2, Math.min(width / contentW, height / contentH)));
+          const tx = width / 2 - scale * (minX + maxX) / 2;
+          const ty = height / 2 - scale * (minY + maxY) / 2;
+          svg.transition().duration(300)
+            .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+        }
+        simulation.on('end', fitToView);
+
+        simulation.on('tick', () => {
+          link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+          node.attr('cx', d => d.x).attr('cy', d => d.y);
+          text.attr('x', d => d.x).attr('y', d => d.y);
+        });
+
+        function resize() {
+          const size = currentSize();
+          width = size.width;
+          height = size.height;
+          svg.attr('viewBox', `0 0 ${width} ${height}`);
+          simulation.force('center', d3.forceCenter(width / 2, height / 2));
+          simulation.alpha(0.5).restart();
+          fitToView(); // immediate rough fit; "end" refines it once settled
+        }
+
+        return {
+          resize,
+          destroy() {
+            simulation.stop();
+            svg.on('.zoom', null);
+            svg.selectAll('*').remove();
+            tooltip.remove();
+          },
+        };
+      }
+
+      /* ================= CVE detail panel (loaded on demand per row) ================= */
+      function renderCveDetails(d) {
+        const cvss = d.cvss || {};
+        const cards = [];
+
+        // Weakness
+        const cwes = (d.cwes || []).map(c => {
+          const m = /^CWE-(\d+)$/.exec(c.id);
+          const id = m
+            ? `<a href="https://cwe.mitre.org/data/definitions/${m[1]}.html" target="_blank" rel="noopener">${esc(c.id)}</a>`
+            : esc(c.id);
+          return `<p>${id}${c.name ? ' &mdash; ' + esc(c.name) : ''}</p>`;
+        }).join('');
+        cards.push(`<div class="cve-card"><h4>Weakness</h4>${cwes || '<p class="cve-muted">No CWE assigned</p>'}</div>`);
+
+        // CVSS breakdown
+        let cvssBody = '<p class="cve-muted">No CVSS data</p>';
+        if (cvss.vector) {
+          const chips = (cvss.breakdown || []).map(b =>
+            `<span class="cve-chip">${esc(b.label)}: <strong>${esc(b.value)}</strong></span>`).join('');
+          const subs = [];
+          if (cvss.exploitability != null) subs.push(`Exploitability ${esc(cvss.exploitability)}`);
+          if (cvss.impact != null) subs.push(`Impact ${esc(cvss.impact)}`);
+          cvssBody = `<p><code>${esc(cvss.vector)}</code></p>` +
+            `<p class="cve-muted">CVSS ${esc(cvss.version)}${cvss.source ? ' &middot; ' + esc(cvss.source) : ''}` +
+            `${subs.length ? ' &middot; ' + subs.join(' &middot; ') : ''}</p>` +
+            `<div class="cve-chips">${chips}</div>`;
+        }
+        cards.push(`<div class="cve-card"><h4>CVSS vector</h4>${cvssBody}</div>`);
+
+        // CISA KEV
+        if (d.kev) {
+          const ransomware = d.kev.ransomware === 'Known';
+          cards.push(`<div class="cve-card"><h4>CISA known exploited</h4>` +
+            (d.kev.name ? `<p><strong>${esc(d.kev.name)}</strong></p>` : '') +
+            `<p>Added to catalog: <strong>${esc(d.kev.date_added || 'n/a')}</strong></p>` +
+            `<p>Remediation due: <strong>${esc(d.kev.due_date || 'n/a')}</strong></p>` +
+            `<p>Ransomware campaigns: <span class="cve-chip${ransomware ? ' cve-chip-danger' : ''}">${esc(d.kev.ransomware || 'Unknown')}</span></p>` +
+            (d.kev.required_action ? `<p class="cve-muted">${esc(d.kev.required_action)}</p>` : '') +
+            `</div>`);
+        }
+
+        // Version match
+        if (d.version_match) {
+          const labels = { 'Affected': 'Confirmed affected', 'Unverified': 'Unverified' };
+          cards.push(`<div class="cve-card"><h4>Version match</h4>` +
+            `<p><strong>${esc(labels[d.version_match.status] || d.version_match.status)}</strong></p>` +
+            (d.version_match.detail ? `<p class="cve-muted">${esc(d.version_match.detail)}</p>` : '') +
+            `</div>`);
+        }
+
+        // Record info
+        const day = s => esc((s || '').slice(0, 10) || 'n/a');
+        cards.push(`<div class="cve-card"><h4>NVD record</h4>` +
+          `<p>Published: <strong>${day(d.published)}</strong></p>` +
+          `<p>Last modified: <strong>${day(d.last_modified)}</strong></p>` +
+          `<p>Status: <strong>${esc(d.nvd_status || 'n/a')}</strong></p>` +
+          `<p>Affected configurations: <strong>${esc(d.affected_count)}</strong></p></div>`);
+
+        // References grouped by tag
+        const groups = (d.references || []).map((g) => {
+          const links = g.links.map(l =>
+            `<li><a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.url)}</a>` +
+            `${l.tags.length ? ' <span class="cve-muted">(' + esc(l.tags.join(', ')) + ')</span>' : ''}</li>`).join('');
+          // Open the most actionable groups by default
+          const open = (g.tag === 'Patch' || g.tag === 'Exploit' || g.tag === 'Vendor Advisory') ? ' open' : '';
+          return `<details class="cve-ref-group"${open}><summary>${esc(g.tag)} (${g.links.length})</summary>` +
+            `<ul class="cve-ref-list">${links}</ul></details>`;
+        }).join('');
+
+        return `<div class="cve-details">` +
+          `<p class="cve-desc">${esc(d.description)}</p>` +
+          `<div class="cve-details-grid">${cards.join('')}</div>` +
+          `<div class="cve-refs"><h4 class="cve-muted" style="font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:.4rem">References</h4>` +
+          `${groups || '<p class="cve-muted">No references</p>'}</div></div>`;
+      }
+
+      /* ================= exports, API key, site tabs ================= */
+      function downloadCSV() {
+        window.open(`/download/csv?job=${encodeURIComponent(state.jobId)}`, '_blank');
+      }
+      function downloadExcel() {
+        window.open(`/download/excel?job=${encodeURIComponent(state.jobId)}`, '_blank');
+      }
 
       // Toggle API key visibility
       function toggleApiKeyVisibility() {
-          const apiKeyInput = document.getElementById('api_key');
-          const toggleIcon = document.getElementById('toggleIcon');
-
-          if (apiKeyInput.type === 'password') {
-              apiKeyInput.type = 'text';
-              toggleIcon.textContent = '🙈';
-          } else {
-              apiKeyInput.type = 'password';
-              toggleIcon.textContent = '👁️';
-          }
+        const apiKeyInput = document.getElementById('api_key');
+        const toggleIcon = document.getElementById('toggleIcon');
+        if (apiKeyInput.type === 'password') {
+          apiKeyInput.type = 'text';
+          toggleIcon.textContent = '🙈';
+        } else {
+          apiKeyInput.type = 'password';
+          toggleIcon.textContent = '👁️';
+        }
       }
 
       function setApiKeyStatus(text, saved) {
-          const status = document.getElementById('apiKeyStatus');
-          status.textContent = text;
-          status.className = 'text-sm ' + (saved ? 'text-green-600' : 'text-gray-500');
+        const status = document.getElementById('apiKeyStatus');
+        status.textContent = text;
+        status.className = 'text-sm ' + (saved ? 'text-green-600' : 'text-gray-500');
       }
 
       // Persist the API key to config.env on disk (survives closing the app)
       function saveApiKey() {
-          const apiKey = document.getElementById('api_key').value.trim();
-          if (!apiKey) {
-              alert('Enter an API key first.');
-              return;
+        const apiKey = document.getElementById('api_key').value.trim();
+        if (!apiKey) {
+          alert('Enter an API key first.');
+          return;
+        }
+        fetch('/api/save-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            setApiKeyStatus('✓ Saved to disk', true);
+          } else {
+            setApiKeyStatus(data.message || 'Failed to save', false);
           }
-          fetch('/api/save-key', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ api_key: apiKey })
-          })
-          .then(response => response.json())
-          .then(data => {
-              if (data.status === 'success') {
-                  setApiKeyStatus('✓ Saved to disk', true);
-              } else {
-                  setApiKeyStatus(data.message || 'Failed to save', false);
-              }
-          })
-          .catch(error => {
-              console.error('Error saving API key:', error);
-              setApiKeyStatus('Error saving API key', false);
-          });
+        })
+        .catch(error => {
+          console.error('Error saving API key:', error);
+          setApiKeyStatus('Error saving API key', false);
+        });
       }
 
       // Clear the API key from both the session and config.env on disk
       function clearApiKey() {
-          if (!confirm('Are you sure you want to clear the saved API key?')) return;
-
-          fetch('/clear-api-key', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
-          })
-          .then(response => response.json())
-          .then(() => {
-              document.getElementById('api_key').value = '';
-              setApiKeyStatus('Not saved', false);
-          })
-          .catch(error => {
-              console.error('Error clearing API key:', error);
-              alert('Error clearing API key. Please try again.');
-          });
+        if (!confirm('Are you sure you want to clear the saved API key?')) return;
+        fetch('/clear-api-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(() => {
+          document.getElementById('api_key').value = '';
+          setApiKeyStatus('Not saved', false);
+        })
+        .catch(error => {
+          console.error('Error clearing API key:', error);
+          alert('Error clearing API key. Please try again.');
+        });
       }
 
       // Site-level tabs: Scanner / Settings
       function switchToSettingsTab(event) {
-          if (event) event.preventDefault();
-          document.getElementById('site-tab-btn-settings').click();
+        if (event) event.preventDefault();
+        document.getElementById('site-tab-btn-settings').click();
       }
 
       (function () {
-          const siteTabButtons = document.querySelectorAll('[data-site-tab]');
-          const sitePanels = {
-              scanner: document.getElementById('site-panel-scanner'),
-              settings: document.getElementById('site-panel-settings'),
-          };
+        const siteTabButtons = document.querySelectorAll('[data-site-tab]');
+        const sitePanels = {
+          scanner: document.getElementById('site-panel-scanner'),
+          settings: document.getElementById('site-panel-settings'),
+        };
 
-          function activateSiteTab(name) {
-              siteTabButtons.forEach(btn => {
-                  const active = btn.dataset.siteTab === name;
-                  btn.classList.toggle('is-active', active);
-                  btn.setAttribute('aria-selected', String(active));
-              });
-              Object.entries(sitePanels).forEach(([key, panel]) => {
-                  if (panel) panel.hidden = key !== name;
-              });
-          }
+        function activateSiteTab(name) {
+          exitFullscreen();
+          siteTabButtons.forEach(btn => {
+            const active = btn.dataset.siteTab === name;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', String(active));
+          });
+          Object.entries(sitePanels).forEach(([key, panel]) => {
+            if (panel) panel.hidden = key !== name;
+          });
+        }
 
-          siteTabButtons.forEach(btn => btn.addEventListener('click', () => activateSiteTab(btn.dataset.siteTab)));
+        siteTabButtons.forEach(btn => btn.addEventListener('click', () => activateSiteTab(btn.dataset.siteTab)));
       })();
+
+      /* ================= startup ================= */
+      $(document).ready(function () {
+        buildTiles();
+
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(btn =>
+          btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+
+        // The map's full-page toggle shares its logic with the CVE table's
+        bindFullscreen(document.getElementById('dependencyGraphContainer'),
+          document.getElementById('depGraphFullscreenBtn'), {
+            labels: ['⛶ Fullscreen', '⤫ Exit fullscreen'],
+            onChange: () => state.graph && state.graph.resize(),
+          });
+
+        window.addEventListener('resize', () => {
+          if (state.graph) state.graph.resize();
+          if (state.table && !document.getElementById('results').hidden) state.table.columns.adjust();
+        });
+
+        // Search: start the scan, then load results as each stage produces them
+        $('#searchForm').on('submit', async function (e) {
+          e.preventDefault();
+          resetResults();
+          setSearching(true);
+          $('#scanProgress').prop('hidden', false);
+          setProgress('Starting...', 0.02);
+          startTimer();
+          try {
+            const r = await fetch('/api/scan', { method: 'POST', body: new URLSearchParams(new FormData(this)) });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.message || 'Could not start the search.');
+            attachJob(d.job_id);
+          } catch (err) {
+            failScan(err.message);
+          }
+        });
+
+        // Reloaded on /?job=<id>: re-attach to that scan (running or finished)
+        if (initialJobId) {
+          resetResults();
+          setProgress('Loading...', 0.02);
+          attachJob(initialJobId);
+        }
+      });
+    {% endraw %}
     </script>
 
     <script>
@@ -2030,15 +2776,23 @@
           const textColor = theme === "dark" ? "#d1d5db" : "#374151";
           const gridColor = theme === "dark" ? "#374151" : "#e5e7eb";
 
+          // Charts created after this point (first visit to the Analytics tab) start themed too
+          Chart.defaults.color = textColor;
+          Chart.defaults.borderColor = gridColor;
+
           Object.values(window.cveCharts || {}).forEach((chart) => {
+            if (chart && chart.config.type === 'doughnut') {
+              chart.data.datasets.forEach(ds => { ds.borderColor = surfaceColor(); });
+            }
             if (chart && chart.options) {
               if (chart.options.scales) {
                 Object.values(chart.options.scales).forEach((scale) => {
                   if (scale.ticks) scale.ticks.color = textColor;
                   if (scale.grid) scale.grid.color = gridColor;
+                  if (scale.title) scale.title.color = textColor;
                 });
               }
-              if (chart.options.plugins && chart.options.plugins.legend) {
+              if (chart.options.plugins && chart.options.plugins.legend && chart.options.plugins.legend.labels) {
                 chart.options.plugins.legend.labels.color = textColor;
               }
               chart.update();
