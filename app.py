@@ -21,6 +21,17 @@ import csv
 import networkx as nx
 import secrets
 
+try:
+    # Make outbound HTTPS (requests/urllib3) trust whatever root CAs Windows
+    # itself trusts, in addition to certifi's bundled public CA list. Without
+    # this, a corporate TLS-inspecting proxy (Zscaler/Netskope/etc.) whose CA
+    # IT has pushed into the Windows trust store still fails verification
+    # here, because certifi only ships public CAs and has no idea about it.
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass  # older Python (<3.10) or truststore missing -- falls back to certifi only
+
 
 def resource_path(relative_path):
     """Path to a bundled read-only asset (templates/static). Resolves inside

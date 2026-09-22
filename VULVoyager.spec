@@ -10,7 +10,7 @@ if os.path.isdir('static'):
 binaries = []
 hiddenimports = ['flask', 'webview']
 
-for pkg in ('flask', 'webview'):
+for pkg in ('flask', 'webview', 'truststore'):
     tmp_ret = collect_all(pkg)
     datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
