@@ -2097,10 +2097,10 @@
         $('#scanProgress').prop('hidden', true);
         setSearching(false);
         $('#btnCsv, #btnExcel').prop('disabled', false).removeAttr('title');
-        if (!state.table) {  // the search matched nothing: still show the (empty) results view
-          revealResults();
-          initTable();
-        }
+        // A search that matched nothing never went through addRows(), so the results
+        // view is still hidden -- show it (with an empty table) either way
+        revealResults();
+        if (!state.table) initTable();
         updateTiles();
         const tab = currentTab();
         if (tab === 'analytics') ensureAnalytics();
